@@ -366,3 +366,149 @@ Nothing is private on the Ethereum blockchain!
 State variables get stored in index-based slots, and the order of how we list our variables in our contracts matter.  Ordering our contract's state variables inefficiently can result in poorly optimized storage space which will lead to higher gas costs.
 
 Casting is the process of converting a variable of one type to another type.  Because Solidity is a strictly typed language, we need to know how to do this.
+
+## 13. Gatekeeper One
+
+This level is probably the most challenging so far since we'll need to be able to pass 3 obstacles to be able to register as an entrant.
+
+1. Simple msg.sender != tx.origin.
+2. A cute gasLeft().mod(8191) == 0.
+3. A series of require's telling us what the gate key must look like.
+
+Gate 1
+Solution to the first gate is trivial, just use a contract as a middleman. From previous puzzles we have learned that msg.sender is the immediate sender of a transaction, which may be a contract; however, tx.origin is the originator of the transaction which is usually us.
+
+Gate 2
+Here we need to adjust the gas used in the transaction. We can do this by specifying the gas to be forwarded similar to how we specify ether value: foo{gas: ...}(). To find the proper gas amount is the tricky part, because we don't know exactly how much gas we will have by then. Here is what we can do: we will find a good approximate gas value, and then brutely try a range of values around it. The steps to do that is as follows:
+
+```
+  function enterOnce(uint _gas) public {
+    bytes memory callbytes = abi.encodeWithSignature(("enter(bytes8)"),key);
+    (bool success, ) = target.call{gas: _gas}(callbytes);
+    require(success, "failed");
+  }
+```
+
+Copy paste the contract in Remix, and try to enter the gate (assuming that gate 1 is passing at this point). I wrote a small utility for this in my attacker contract, shown above.
+
+Unless we are extremely lucky, the transaction will be rejected by this gate. That is ok, because we want to debug it!
+
+Debug the transaction in Remix to get to the GAS opcode, which is what gasleft() is doing in the background. There, we will look at the remaining gas field in "Step Details". We can easily get there in several ways:
+
+Clicking "Click here to jump where the call reverted." and then going backward a bit until you find the opcode.
+Putting a breakpoint to the line with gasleft() and clicking right arrow at the debugger, which will go very close to that opcode.
+Another cool way is to actually get inside the SafeMath libraries modulus function, and then look at the local variables in the debugger. One of them will be 8191, the other will be the gas in question.
+In my case, I had forwarded 10000 gas and right at the GAS opcode I had 9748 left. That means I used 252 gas to get there. If I start with 8191 \* k + 252 gas for some large enough "k" to meet the overall gas requirement, I should be okay! The thing is, gas usage can change with respect to the compiler version, but in the puzzle we see that ^0.6.0 is used above, so we will do all the steps above with that version.
+
+I set the gas candidate as 8191 \* 5 + 252 = 41207 with a margin of 32. Then I let it loose on the gate keeper!
+
+function enter(uint \_gas, uint \_margin) public {
+bytes memory callbytes = abi.encodeWithSignature(("enter(bytes8)"),key);
+bool success;
+for (uint g = \_gas - \_margin; g <= \_gas + \_margin; g++) {
+(success, ) = target.call{gas: g}(callbytes);
+if (success) {
+correctGas = g; // for curiosity
+break;
+}
+}
+require(success, "failed again my boy.");
+}
+It was successful, and I also kept record of the correct gas amount which turned out to be 41209.
+
+Gate 3
+We are using an 8-byte key, so suppose the key is ABCD where each letter is 2 bytes (16 bits).
+
+CD == D so C: must be all zeros.
+CD != ABCD so AB must not be all zeros.
+CD == uint16(tx.origin): C is already zeros, and now we know that D will be the last 16-bits of tx.origin.
+So, my uint16(tx.origin) is C274; and I will just set AB = 0x 0000 0001 to get \_gateKey = 0x 0000 0001 0000 C274. Alternatively, you can use bitwise masking by bitwise-and'ing (&) your tx.origin with 0x FFFF FFFF 0000 FFFF.
+
+That is all folks :)
+
+## 14. Gatekeeper Two
+
+Very similar to the previous level except it requires us to know a little bit more about bitwise operations (specifically XOR) and about `extcodesize`.
+
+1. The workaround to `gateOne` is to initiate the transaction from a smart contract since from the victim's contract pov, `msg.sender` = address of the smart contract while `tx.origin` is your address.
+2. `gateTwo` is a bit tricky because how can both extcodesize == 0 and yet msg.sender != tx.origin? Well the solution to this is that all function calls need to come from the constructor!
+   Here is the real gate
+
+```
+modifier gateTwo() {
+  uint x;
+  assembly { x := extcodesize(caller()) }
+  require(x == 0);
+  _;
+}
+```
+
+The extcodesize basically returns the size of the code in the given address, which is caller for this case. Contracts have code, and user accounts do not. To have 0 code size, you must be an account; but wait, how will we pass the first gate if that is the case? Here is the trick of this gate: extcodesize returns 0 if it is being called in the constructor!  
+In short, we have to execute our attack from within the constructor, cause when we first deploy a contract, the extcodesize of that address is 0 until the constructor is completed!
+Check this stack convo for more understanding on extcodesize "https://ethereum.stackexchange.com/questions/15641/how-does-a-contract-find-out-if-another-address-is-a-contract/15642#15642"
+
+3. `gateThree` is very easy to solve if you know the XOR rule of `if A ^ B = C then A ^ C = B`.
+   This is an XOR operation (often denoted with ⊕), and there is really only one parameter we can control here: the gate key. XOR has the property that if the same value XORs itself they cancel out; also, XOR is commutative so a ⊕ b = b ⊕ a. Starting with a ⊕ b = c, XOR both sides with a we get a ⊕ a ⊕ b = c ⊕ a, and the left side cancels out to give b = c ⊕ a.
+
+One more thing: (uint64(0) - 1) causes is not really good for Solidity, and even caused gas estimation errors for me! The result is basically the maximum possible value of uint64, and we have a cool way to find it via type(uint64).max.
+
+We can safely find the gate key as:
+
+```
+bytes8 key = bytes8(type(uint64).max ^ uint64(bytes8(keccak256(abi.encodePacked(address(this))))));
+```
+
+Note that as of solidity 0.8.0, you cannot do uint64(0) - 1 unless it's done inside an uncheck scope.
+
+```
+pragma solidity ^0.8.0;
+
+contract AttackGatekeeperTwo {
+
+    constructor(address _victim) {
+        bytes8 _key = bytes8(uint64(bytes8(keccak256(abi.encodePacked(address(this))))) ^ type(uint64).max);
+        bytes memory payload = abi.encodeWithSignature("enter(bytes8)", _key);
+        (bool success,) = _victim.call(payload);
+        require(success, "failed...");
+    }
+
+    function passGateThree() public view returns(bool) {
+        // if a ^ b = c then a ^ c = b;
+        // uint64(bytes8(keccak256(abi.encodePacked(msg.sender)))) ^ uint64(_gateKey) == uint64(0) - 1
+        // would be rewritten as
+        // uint64(bytes8(keccak256(abi.encodePacked(msg.sender)))) ^ uint64(0) - 1 == uint64(_gateKey)
+        uint64 key = uint64(bytes8(keccak256(abi.encodePacked(msg.sender)))) ^ type(uint64).max;
+        return uint64(bytes8(keccak256(abi.encodePacked(msg.sender)))) ^ key == type(uint64).max;
+    }
+}
+```
+
+MAIN TAKEAWAY FROM CHALLENGE:
+
+Checking for a contract's code size during construction of that contract using the EXTCODESIZE opcode, you're going to get an empty value because the contract has not been fully constructed yet. During construction, the contract will receive a pre-made address but its size will be zero until construction is complete.
+We can create zombie contracts by stopping a contract's initialization. Meaning, the contract has an address but no associated code.
+
+## 15. Naught Coin
+
+Here we have a simple ERC-20 contract in our hands, that prevents us to transfer money to someone. However, this does not prevent us to approve that someone, and let them call transferFrom to take our money. That is precisely what we are going to do. We create and deploy a simple contract, Perhaps this is just to us developers to be careful when implementing the business logic and to ensure that other functions cannot somehow bypass it e.g. using `transferFrom` to bypass the `lockTokens` modifier on `transfer`.
+
+The solution is to just approve another address using the below contract;
+
+```
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity ^0.8.0;
+
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/IERC20.sol";
+
+contract NaughtWithdraw {
+  function withdrawFrom(address _tokenAddr, address _from, uint _amount) public {
+    bool success = IERC20(_tokenAddr).transferFrom(_from, address(this), _amount);
+    require(success, "failed!");
+  }
+}
+```
+
+MAIN TAKEAWAY FROM CHALLENGE:
+
+There are two ways to transfer tokens from an ERC20 token: by using the transfer() method, or performing a delegated transfer by using both approve() and transferFrom() in conjunction with each other. With delegated transfers, an account can approve another account to send tokens on its behalf.
+
