@@ -512,3 +512,149 @@ MAIN TAKEAWAY FROM CHALLENGE:
 
 There are two ways to transfer tokens from an ERC20 token: by using the transfer() method, or performing a delegated transfer by using both approve() and transferFrom() in conjunction with each other. With delegated transfers, an account can approve another account to send tokens on its behalf.
 
+
+
+## 16. Preservation
+Here we need to understand how `delegatecall` works and how it affects storage variables on the calling contract to be able to solve this level. The given contract actually suffers from a bug, which we used as an exploit in the 6th level (Delegation). When we call setFirstTime, it actually overwrites the value in timeZone1Library storage variable!
+
+In short, the `LibraryContract` is trying to modify the variable at index 0 but on the calling contract, index 0 is the address of `timeZone1Library`. So first you need to call `setTime()` to replace `timeZone1Library` with a malicious contract. In this malicious contract, `setTime()` which will modify index 3 which on the calling contract is the owner variable!
+
+1. Deploy the malicious library contract
+2. Convert malicious contract address into uint.
+3. Call either `setFirstTime()` or `setSecondTime()` with the uint value of the malicious contract address (step 2)
+4. Now that the address of `timeZone1Library` has been modified to the malicious contract, get the uint value of your player address
+5. call `setFirstTime()` with the uint value of your player address.
+```
+pragma solidity ^0.8.0;
+
+contract PreservationAttack {
+
+    // stores a timestamp
+    address doesNotMatterWhatThisIsOne;
+    address doesNotMatterWhatThisIsTwo;
+    address maliciousIndex;
+
+    function setTime(uint _time) public {
+        maliciousIndex = address(uint160(_time));
+    }
+}
+
+await contract.setFirstTime("<insert the uint value of your malicious library contract>")
+await contract.setFirstTime("<insert the uint value of your player>)
+
+```
+MAIN TAKEAWAY FROM CHALLENGE:
+Quoting the author's message: "This example demonstrates why the library keyword should be used for building libraries, as it prevents the libraries from storing and accessing state variables."
+
+The order in which we list state variables in a contract correspond to slots in storage, and require particular attention when using delegatecall.
+
+
+## 17. Recovery
+Contract addresses are deterministic and are calculated by keccack256(RLP_encode(address, nonce)). The nonce for a contract is the number of contracts it has created. All nonce's are 0 for contracts, but they become 1 once they are created (the completion of the creation makes the nonce 1).
+We might need to read more about Read about RLP encoding in the Ethereum docs https://ethereum.org/en/developers/docs/data-structures-and-encoding/rlp/. We want the RLP encoding of a 20 byte address and a nonce value of 1, which corresponds to the list such as [<20 byte string>, <1 byte integer>].
+For the string:
+if a string is 0-55 bytes long, the RLP encoding consists of a single byte with value 0x80 (dec. 128) plus the length of the string followed by the string. The range of the first byte is thus 0x80, 0xb7.
+
+For the list, with the string and the nonce in it:
+if the total payload of a list (i.e. the combined length of all its items being RLP encoded) is 0-55 bytes long, the RLP encoding consists of a single byte with value 0xc0 plus the length of the list followed by the concatenation of the RLP encodings of the items. The range of the first byte is thus 0xc0, 0xf7.
+
+This means that we will have:
+```
+[
+  0xC0
+    + 1 (a byte for string length) 
+    + 20 (string length itself) 
+    + 1 (nonce), 
+  0x80
+    + 20 (string length),
+  <20 byte string>,
+  <1 byte nonce>
+]
+```
+In short: [0xD6, 0x94, <address>, 0x01]. We need to find the keccak256 of the packed version of this array, which we can find via:
+
+web3.utils.soliditySha3(
+  '0xd6',
+  '0x94',
+  // <instance address>,
+  '0x01'
+)
+The different when using soliditySha3 rather than sha3 is that this one will encode-packed the parameters like Solidity would; hashing afterwards. The last 20 bytes of the resulting digest will be the contract address! 
+
+A function called `destroy()` exists which calls `selfdestruct()`. `selfdestruct()` is a way for us to "destroy" a contract and retrieve the entire eth balance at that address. So what we need to do is encode it into the `data` payload initiate a transaction to it. We need to analyse our transaction hash to determine the address of the lost contract. Once we have that, this level is solved.
+```
+data = web3.eth.abi.encodeFunctionCall({
+    name: 'destroy',
+    type: 'function',
+    inputs: [{
+        type: 'address',
+        name: '_to'
+    }]
+}, [player]);
+await web3.eth.sendTransaction({
+    to: "<insert the address of the lost contract>",
+    from: player,
+    data: data
+})
+```
+MAIN TAKEAWAY FROM CHALLENGE:
+
+Smart Contract addresses are computed deterministically.  So if we lose a contract's address, we can retrieve it by computing the result of a deterministic formula.  Or if we have the address of the Externally Owned Account that created the contract, we can use Etherscan and find the contract's address there.
+
+Deterministic formula:
+
+lostAddress = rightmost_20_bytes(keccak(RLP(senderAddress, nonce)));
+
+## 18. MagicNumber
+This level is not really a security challenge but rather it just teaches us the basics of the Ethereum Virtual Machine (EVM) like bytecode and opcodes, and how contracts get created when first deployed.
+checkt this "https://dev.to/erhant/ethernaut-18-magic-number-1iah" by Erhan Tezcan for more explanation
+
+## 19. AlienCodex
+In order to solve this level, we need to understand about 3 things:
+1. Packing of storage variables to fit into one storage slot of 32bytes
+2. How values in dynamic arrays are stored
+3. How to modify an item outside of the size of the array.ss
+
+The problem is hinting us to somehow use the codex array to change the owner of the contract. The tool in doing so probably has something to do with the length of array. In fact, the retract is suspiciously dangerous, and actually might underflow the array length!. The array length is an uint256, and once it is underflowed you basically "have" the entire contract storage (all 2 ^ 256 - 1 slots) as a part of your array. Consequently, you can index everything in the memory with that array!
+-After make_contact, we see that await web3.eth.getStorageAt(contract.address, 0) returns 0x000000000000000000000001da5b3fb76c78b6edee6be8f11a1c31ecfb02b272. Remember that smaller than 32-bytes variables are bundled together if they are conseuctive, so this is actually owner and contact variable side by side! The 01 at the end of leftmost 0x00..01 stands for the boolean value.
+-The next slot, await web3.eth.getStorageAt(contract.address, 1) is the length of codex array. If you record something you will see that it gets incremented. Well, what if we retract? You will be shocked to see that it becomes 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff!
+So then, how does indexing work and how can we index the owner slot now that our array covers the entire storage? We look at the docs of highest version 0.5.0 as that is what the puzzle uses: https://docs.soliditylang.org/en/v0.5.17/miscellaneous.html#mappings-and-dynamic-arrays.
+
+The mapping or the dynamic array itself occupies a slot in storage at some position p according to the above rule (or by recursively applying this rule for mappings of mappings or arrays of arrays). For dynamic arrays, this slot stores the number of elements in the array. Array data is located at keccak256(p).
+
+To see this in action, we can do:
+
+```
+await contract.record('0xffffffffffffffffffffffffffffffff')
+await web3.eth.getStorageAt(contract.address , web3.utils.hexToNumberString(web3.utils.soliditySha3(1)))
+// 0xffffffffffffffffffffffffffffffff00000000000000000000000000000000
+```
+ first we have to retract until the array length underflows, and then we just have to offset enough from keccak256(1) until we overflow and get back to 0th index, overwriting the owner! The array data is located at uint256(keccak256(1)) and there are 2 ** 256 - 1 - uint256(keccak256(1)) values between that and the end of memory. So, just adding one more to that would mean we go to 0th index. To calculate this index I just wrote a small Solidity code in Remix:
+```
+function index() public pure returns(uint256) {
+  return type(uint256).max - uint256(keccak256(abi.encodePacked(uint256(1)))) + 1; 
+}
+```
+Then we call the revise function as follows:
+```
+await contract.codex('35707666377435648211887908874984608119992236509074197713628505308453184860938') // if you want to confirm
+await contract.revise('35707666377435648211887908874984608119992236509074197713628505308453184860938', web3.utils.padLeft(player, 64))
+```
+Check this location for deeper explanation on level "https://dev.to/erhant/ethernaut-19-alien-codex-3e49"
+
+
+
+## 20. Denial
+This level is very similar to the levels Force and King. The problem with the Denial contract is the fact that instead of transferring using `.send()` or `.transfer`() which has a limit of 2300 gas and the exploit has to do with call function: partner.call{value:amountToSend}(""), by using`.call()` if no limit on the gas is specified, it will send all gas along with it.  `assert(false)`  used to do the trick in the old versions but it no longer works due to a [breaking change](https://blog.soliditylang.org/2020/12/16/solidity-v0.8.0-release-announcement/) in solidity v0.8.0 so we need another way to expand all available gas. The simplest way to do this is to run a fallback function in an infinite loop.
+```
+pragma solidity ^0.8.0;
+
+contract DenialAttack {
+    receive() external payable {
+        while(true){}
+    }
+}
+
+await contract.setWithdrawPartner("<address of your deployed AttackDenial contract.>");
+```
+We then set the withdrawal partner as this contract address, and we are done.
