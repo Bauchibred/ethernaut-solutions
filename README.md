@@ -1,6 +1,6 @@
 # Solutions to the Ethernaut challenges
 
-This repo is all about me solving the ethernaut challenges and giving you hints on how to solve thewm yourselves.
+This repo is all about me solving the ethernaut challenges and giving you hints on how to solve them yourselves.
 
 ## 0. Hello Ethernaut
 
