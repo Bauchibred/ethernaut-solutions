@@ -15,6 +15,8 @@ Let's start by figuring out how to become the owner. If you look at the contract
 
 Thereafter we will initiate a plain ETH transfer into the contract to become the owner. To complete the second requirement, we will call the `withdraw` function to withdraw the funds out.
 
+Also note that using static solidity version is the best practice for writing codes, always check the contract's Abi to see what functions you can call on the contract
+When sending transactions we use a JSON object, curly brackets and use value
 ```
 await contract.contribute({value: 1437});
 await contract.send({value: 1437});
@@ -37,6 +39,8 @@ To become the owner, we just call the `Fal1out` function.
 ```
 await contract.Fal1out({value: 1437});
 ```
+
+A real world example for this is the famous rubixi hack, cause originally it was called DynamicPyramid but the contract name was changed before deployment to Rubixi. The constructor's name wasn't changed, allowing any user to become the creator.
 
 ## 3. Coinflip
 
@@ -72,7 +76,7 @@ contract CoinflipAttack {
 ```
 
 MAIN LESSON FROM CHALLENGE:
-If there is a need to introduce randomness into our contract, we use a decentralized oracle to compute random numbers. That's because there's no native way in Solidity to generate a random number. And everything you write in a Smart Contract is publicly visible, including local and state variables marked as private.
+If there is a need to introduce randomness into our contract, we use a decentralized oracle to compute random numbers or atleast any legit external source to the blockchain, cause all transactions on the Ethereum blockchain are deterministic state transition operations, meaning that every transaction modifies the ecosystem in a calculable way this eventually means that there is no source of entropy or randomness within the blockchain ecosystem. That's because there's no native way in Solidity to generate a random number. And everything you write in a Smart Contract is publicly visible, including local and state variables marked as private.
 
 ## 4. Telephone
 
