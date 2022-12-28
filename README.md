@@ -80,7 +80,9 @@ If there is a need to introduce randomness into our contract, we use a decentral
 
 ## 4. Telephone
 
-Here we learn the nuance between using the global variables "tx.origin" and "msg.sender". And we also learn the proper way to do authorization checks in our contract functions.
+Here we learn the nuance between using the global variables "tx.origin" and "msg.sender".
+tx.origin is a global variable that returns the address of the account that originally sent the call, using this for authentication allows a phishing-like attack to be possible
+And we also learn the proper way to do authorization checks in our contract functions.
 The way to hack this level is to understand how tx.origin works. When we call a contract (A) function from within another contract (B), the msg.sender is the address of B, not the account that initiated the function from which is tx.origin.
 Using the following contract on remix and calling the `hackContract` function to take over the victim contract, dont forget that we need to copy and paste the code to this level to remix inorder to be able to import it and successfully hack the level
 
@@ -103,11 +105,14 @@ contract TelephoneHack {
 
 MAIN LESSON FROM CHALLENGE:
 We should never use tx.origin for authorization in the functions of our contracts.
+For more info on why not to use tx.origin for authorization check this https://hackernoon.com/hacking-solidity-contracts-using-txorigin-for-authorization-are-vulnerable-to-phishing
+
 
 ## 5. Token
 
-In this level, we are going to dive a bit into arithmetic operations in Solidity and also how numbers are stored in solidity memory, also with this we see what can go wrong if we make a mistake when perfoming arithmetic operations in solidity.
-But with the release of Solidity v0.8 we don't have to use Open Zeppelin's SafeMath library for arithmetic operations anymore! SafeMath is now automatically integrated into our contracts when we set the pragma directive to 0.8 and above. With this upgrade to Solidity, our code will automatically revert on overflows and underflows.
+In this level, there is a need to dive a bit into arithmetic operations in Solidity and also how numbers are stored in solidity memory, also with this we see what can go wrong if we make a mistake when perfoming arithmetic operations in solidity.
+An example of this is adding 257 to a uint8 that currently has a zero value will result in the number 1, cause the maximum value it can store is 255 and then it's back to 0, then 1. So attackers are able to abuse code and produce unexpected logic flows thanks to these sorts of numerical caveats.
+But with the release of Solidity v0.8 we don't have to use Open Zeppelin's SafeMath library for arithmetic operations anymore! With this upgrade to Solidity, our code will automatically revert on overflows and underflows.
 
 To become the owner of this contract, we just need to pass a value > 20 since the condition in the first require statement will underflow and therefore will always pass.
 balances[msg.sender] -= \_value; This is where we can trigger an arithmetic underflow and we use the transfer function to hack this smart contract
