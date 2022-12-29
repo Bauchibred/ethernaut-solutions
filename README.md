@@ -124,10 +124,11 @@ await contract.transfer(instance, 21)
 
 ## 6. Delegation
 
-Delegate in itself basically means to entrust a task or responsibility to someone else.
-DelegateCall means you take the implementation logic of the function in the contract you're making this call to but using the storage of the calling contract.
-The delegatecall function should only be used with extreme care because it's particularly risky. Side note, it's been used as an attack vector on a lot of historic hacks including The Parity Wallet Hack which allowed an attacker to steal over ~$30,000,000 USD.
-So main key here is to get a function signature for the pwn function, and we can do this by using the sha 3 web 3 tool, which we get by creating the variable of the pwnFunctionSignature
+To get this let's first understand what delegate in itself means, Delegate basically means to entrust a task or responsibility to someone else.
+DelegateCall means we take the implementation logic of the function in the contract you're making this call to but using the storage of the calling contract.
+The DelegateCall opcode is identical to the standard message call, except that the code executed at the targeted address is run in the context of the calling contract along with the fact that msg.sender and msg.value remain unchanged. This opocode enables the implementation of libraries whereby developers can create reusable code for future contracts.
+This function should only be used with extreme care because it's particularly risky. Side note, it's been used as an attack vector on a lot of historic hacks including The Parity Wallet Hack which allowed an attacker to steal over ~$30,000,000 USD.
+So main key to solving this level here is to get a function signature for the pwn function, and we can do this by using the sha 3 web 3 tool, which we get by creating the variable of the pwnFunctionSignature
 By using
 var pwnFuncSignature = web3.utils.sha3("pwn()")
 And then we pass the data and key for our pwnfuncsignature using
@@ -141,7 +142,9 @@ contract.sendTransaction({data: pwnFuncSignature})
 ```
 
 MAIN LESSON FROM CHALLENGE:
-When we use delegatecall, we're reusing another contract's code but also giving it access to our contract's state variables. Because delegates have complete access to the contract's state, use with extreme caution because delegatecall is risky and has been used as an attack vector before.!
+When we use delegatecall, we're reusing another contract's code but also giving it access to our contract's state variables. Because delegates have complete access to the contract's state, use with extreme caution because delegatecall is risky and has been used as an attack vector before.
+Check below for a two series of the dangers with using delegatecall when the storage are not layered out correctly as in the original contract(link is to the part 2)
+https://www.youtube.com/watch?v=oinniLm5gAM&ab_channel=SmartContractProgrammer
 
 ## 7. Force
 
