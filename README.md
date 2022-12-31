@@ -178,8 +178,10 @@ https://github.com/ethereumbook/ethereumbook/blob/develop/09smart-contracts-secu
 
 ## 8. Vault
 
-Here we mostly learn about about storage on smart contracts and also how we can access a variable by its index in a smart contract.
-If we try accesing the private variables via another contract then they are private but the problem is that everything on the blockchain is visible so even if the variable's visibility is set to private, anyone can still access it based on its index in the smart contract.
+Here we mostly learn about about storage on smart contracts and also how we can access a variable by its index in a smart contract. Very important to also understand how slotting in solidity works as this would help in the future when trying to find out ways of optimising gas for contracts.
+Also we should never confuse a variable being private as being invisible, cause of course If we try accesing the private variables via another contract then they are private but the problem is that everything on the blockchain is visible so even if the variable's visibility is set to private, anyone can still access it based on its index in the smart contract.
+
+And here we can see that the password is at slot 1 since the locked boolean is at slot 0, so using the web3 tool we can get what's stored in slot 1 and then pass it on unlock the boolean and voila level passed, pass the code below to thhe terminal to do this.
 
 ```
 const password = await web3.eth.getStorageAt(instance, 1);
