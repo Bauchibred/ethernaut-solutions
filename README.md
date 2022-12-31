@@ -154,10 +154,11 @@ We all know that there are afew ways to send ether to a contract, we can do this
 2. adding a receive() function
 3. adding a function and specifying it with the "payable" keyword
 
-But if none of the above are added to the code of a contract, there is still one additional technique that can be used to forcefully send ETH to a contract through the use of `selfdestruct`. deploying this contract through remix, also don't forget to specify value before deploying the ForceAttack contract or the `selfdestruct` won't be able to send any ETH over as there are no ETH in the contract to be sent over!
+But if none of the above are added to the code of a contract, there is still one additional technique that can be used to forcefully send ETH to a contract through the use of `selfdestruct`. I now you thought about it too I also at first wonderedhow forcefully sending eth to a contract makes it vulnerable, but cone to think of it now contracts that rely on code execution for all ether sent to them can be vulnerable to attacks where ether is forcibly sent.
+Deploying the below contract on remix, also don't forget that we need to  specify value before deploying the ForceAttack contract so that the  `selfdestruct` can then be able to send ETH over as since the cintract itself has been funded.
 
 ```
-pragma solidity ^0.4.0;
+pragma solidity 0.8.0;
 
 contract ForceAttack {
     constructor () public payable {
@@ -172,6 +173,8 @@ contract ForceAttack {
 MAIN TAKEAWAY FROM CHALLENGE:
 
 If a Smart Contract is not programmed to receive Ether, there's still a way we can force money into it. We write a separate contract that self destructs by calling the global selfdestruct() function which takes an address as a parameter. And right before our contract self destructs, it sends the specified address all of its remaining balance!
+Also to read more about how forcefully sending ether to contract can cause damages, check out the explanation on EtherGame from the below repo
+https://github.com/ethereumbook/ethereumbook/blob/develop/09smart-contracts-security.asciidoc#unexpected-ether
 
 ## 8. Vault
 
