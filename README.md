@@ -194,12 +194,14 @@ Data on a blockchain is never confidential, and that's because contracts store t
 ## 9. King
 
 This level of the challenge is going to show us how a once popular Ponzi Scheme on Ethereum - King Of The Ether - got hacked.
-This is an example of DDoS with unexpected revert when the logic of the victim's contract involve sending funds to the previous "lead", which in this case is the king. Someone with bad intention can just create a smart contract with either:
+This is an example of DDoS with unexpected revert when the logic of the victim's contract involve sending funds to the previous "lead", which in this case is the king. 
+Someone with bad intention can just create a smart contract with either:
 
 - a `fallback` / `receive` function that does `revert()`
 - or the absence of a `fallback` / `receive` function
 
 Since the global variable msg.sender can represent either an Externally Owned Account (a.k.a. user wallet with private key) or Smart Contract Account, once a malicious user uses the smart contract to take over the "king" position, all funds in the victim's contract is effectively stuck in there because nobody can take over as the new "king" no matter how much ether they use because the fallback function in the victim's contract will always fail when it tries to do `king.transfer(msg.value);`
+Note that for this line `_victimAddress.call{value: 10000000000000000 wei}("");` since we are not indicating any specific function that means it's going to hit a fallback or a receive function when it gets executed. So in the King contrat which we are atacking this line executes the receive function.
 
 ```
 pragma solidity ^0.8.0;
