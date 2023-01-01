@@ -220,11 +220,11 @@ contract KingAttack {
 
 ## 10. Re-entrancy
 
-This is the same exploit that led to the [DAO hack](https://www.coindesk.com/learn/2016/06/25/understanding-the-dao-attack/). This was such a collosal attack that it caused the Ethereum blockchain to fork into the official Ethereum blockchain and Ethereum Classic.
+This is the same exploit that led to the [DAO hack](https://www.coindesk.com/learn/2016/06/25/understanding-the-dao-attack/). Which caused the Ethereum blockchain to fork into the official Ethereum blockchain and Ethereum Classic.
 
-There is a pattern called Checks - Effects - Interactions in Solidity.
-So basically, we check whether we can do something, such as checking balance, we then apply the effects of doing it on our contract, such as updating balance then we do the actual interactions on-chain with other, such as transferring money.
-In this case, the function is withdraw but the interaction comes before the effect. This means that when we receive money from within the withdraw, things are briefly in our control until the program goes back to the withdraw function to do the effect. When we have the control, we can call withdraw once more and the same thing will happen again and again.
+There is a very important pattern called Checks - Effects - Interactions in Solidity, this is one of the multiple ways to secure a smart contract from a re-entrant attack, other ways include using a [mutex lock] (https://medium.com/coinmonks/protect-your-solidity-smart-contracts-from-reentrancy-attacks-9972c3af7c21)
+Using the C-E-I, we basically check if we can do something, such as checking balance, we then apply the effects of doing it on our contract, such as updating balance then we do the actual interactions on-chain with other, such as transferring money.
+In this case where we have the withdrawal function with the interaction coming before the effect. This means that when we receive money from within the withdraw, things are briefly in our control until the program goes back to the withdraw function to do the effect. While we have control we can keep on calling withdraw in a loop until everything is drained and there is nothing left.
 
 When we create the instance in this level we can see that the contract balance has a bit of ether where as we don't have any balance. using the below to check in the terminal
 
@@ -233,7 +233,7 @@ await getBalance(contract.address)
 await contract.balanceOf(player)
 ```
 
-We will donate some money to create our initial balance at the target, which will allow the balances[msg.sender] >= \_amount to be true. Now, we can repeadetly withdraw that amount by re-entering the withdraw function. Since balance update effect happens after the transfer interaction, this will go on and on until the balance is depleted. As a defense, we could use a pull-payment approach: the account to be paid must come and withdraw their money themselves, rather than us paying to them, thisis also the method thats used in the minimalistic nft marketplace i deployed on IPFS used.
+So we will donate some money to create our initial balance at the target, which will allow the ``` balances[msg.sender] >= \_amount ``` to be true. Now, we can repeadetly withdraw that amount by re-entering the withdraw function. Since balance update effect happens after the transfer interaction, this will go on and on until the balance is depleted. As a defense, we could use a pull-payment approach: the account to be paid must come and withdraw their money themselves, rather than us paying the ether to them, this is also the method thats used in the minimalistic nft marketplace I deployed on IPFS under the guidance of OG Patrick Collins s/o.
 
 ```
 // SPDX-License-Identifier: MIT
