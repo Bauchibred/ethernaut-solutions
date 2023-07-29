@@ -399,8 +399,6 @@ contract PrivacyAttack {
 
 ```
 
-
-
 MAIN TAKEAWAY FROM CHALLENGE:
 
 Nothing is private on the Ethereum blockchain!
@@ -574,13 +572,13 @@ await contract.transferFrom(player, [another wallet], value);
 
 ```
 
-On a side note, the comands used in the terminal for this level  are known as Immediately Invoked Function Expressions (IIFE), pretty interesting and would advise to check up on 
+On a side note, the commands used in the terminal for this level  are known as Immediately Invoked Function Expressions (IIFE), pretty interesting and would advise to check up on 
 https://www.geeksforgeeks.org/immediately-invoked-function-expressions-iife-in-javascript/
 
 MAIN TAKEAWAY FROM CHALLENGE:
 
 There are two ways to transfer tokens from an ERC20 token: by using the transfer() method, or performing a delegated transfer by using both approve() and transferFrom() in conjunction with each other. With delegated transfers, an account can approve another account to send tokens on its behalf.
-Also while implementing ERC interfaces all available functins shoould be implemented to avoid vulnerablities like this among others, also newer protocols like ERC223, ERC827, ERC721 (used by Cryptokitties) advisable should be considered rather than older ones.
+Also while implementing ERC interfaces all available functions should be implemented to avoid vulnerabilities like this among others, also newer protocols like ERC223, ERC827, ERC721 (used by Cryptokitties) advisable should be considered rather than older ones.
 
 
 
@@ -625,19 +623,19 @@ A great explanation on topics related to how this level is solved can be found o
 
 ## 17. Recovery
 Solving this level we need to figure two things out, first the address of the new contract and then secondly we call the `selfdestruct()` function and transfer all the funds to any address we chose.
-After reading the solidity docs, we know that contract addresses are deterministic and are calculated by `keccack256(RLP_encode(address, nonce))`. The nonce for a contract is the number of contracts it has created. All nonce's are 0 for contracts, but they become 1 once they are created (the completion of the creation makes the nonce 1). So here we need the creator address and the nonce, since we already know the recovery address, which in this case is our level instance address, we can calculate the contract address using this and the nonce, the nonce here is going to be one cause the receovery contract has gone through only one transaction.
+After reading the solidity docs, we know that contract addresses are deterministic and are calculated by `keccak256(RLP_encode(address, nonce))`. The nonce for a contract is the number of contracts it has created. All nonce's are 0 for contracts, but they become 1 once they are created (the completion of the creation makes the nonce 1). So here we need the creator address and the nonce, since we already know the recovery address, which in this case is our level instance address, we can calculate the contract address using this and the nonce, the nonce here is going to be one cause the receovery contract has gone through only one transaction.
 We might need to read more about Read about RLP encoding in the Ethereum docs 
-An easier way is to use etherscan to find out our generated contract address, since we already have our instance address we can go on etherscan and find out the address of the generated contract, now for this level after generating a new instance we can see that there are five transactions atttached:
+An easier way is to use etherscan to find out our generated contract address, since we already have our instance address we can go on etherscan and find out the address of the generated contract, now for this level after generating a new instance we can see that there are five transactions attached:
 - First, we send 0.001 ETH to the Ethernaut contract
 - Which will create the Recovery contract for us
 - The `generateToken()` method is called
 - The SimpleToken contract is then created and we can get the address in this step
-- Lastly, 0.001 ETH is transfered to the SimpleToken contract
+- Lastly, 0.001 ETH is transferred to the SimpleToken contract
 
 Clicking on the address we can see that there is a balance of 0.001 ether that we need to siphon to pass the level
 
 
-A function called `destroy()` exists which calls `selfdestruct()`. `selfdestruct()` is a way for us to "destroy" a contract and retrieve the entire eth balance at that address. So we can use the below contract to do that on remix, we just need to make sure that we've copied and imported the level's conract too to remix 
+A function called `destroy()` exists which calls `selfdestruct()`. `selfdestruct()` is a way for us to "destroy" a contract and retrieve the entire eth balance at that address. So we can use the below contract to do that on remix, we just need to make sure that we've copied and imported the level's contract too to remix 
 ```
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
@@ -654,7 +652,7 @@ contract Attack {
 ```
 
 Easy way explained above already that's by using etherscan to look for the new generated address, so another way to get the new generated contract address as explained in this link https://ethereum.stackexchange.com/questions/98700/find-address-of-a-contract-before-deployment-in-hardhat-and-ethers-js
-That's by running this script on node we precalculate the address of the token contract, where we pass the level's instance address to `from`
+That's by running this script on node we pre-calculate the address of the token contract, where we pass the level's instance address to `from`
 ```
 const { getContractAddress } = require("@ethersproject/address");
 
@@ -698,7 +696,7 @@ s: the size of our stored data. Recall our value is 32 bytes long (or 0x20 in he
 Ethereum memory looks like this, with 0x0, 0x10, 0x20… as the official position references:
 
 
-Now this brings us to a point whwere we find out that before we can return a value, first youwe have to store it in memory.
+Now this brings us to a point where we find out that before we can return a value, first you would have to store it in memory.
 
 So first we store our 0x42 value in memory with mstore(p, v), where p is position and v is the value in hexadecimal:
 6042    // v: push1 0x42 (value is 0x42)
@@ -783,8 +781,8 @@ The goal of the level is to claim ownership of the contract. AlienCodex is inher
 The entire solution can be split into two parts. First, we have to somehow set contract variable to true to gain access to contract methods, because they are protected by contacted modifier.
 
 
-So our first step here is to make contact and set the contact to true, and also the problem is hinting us to somehow use the codex array to change the owner of the contract. The tool in doing so probably has something to do with the length of array. In fact, the retract is suspiciously dangerous, and actually might underflow the array length! SInce we are not following the adviced Check-Effect-Interact pattern. The array length is an uint256, and once it is underflowed you basically "have" the entire contract storage (all 2 ^ 256 - 1 slots) as a part of your array and in the future we can manipulate all as we see deem fit. Consequently, you can index everything in the memory with that array!
--After make_contact, we see that await web3.eth.getStorageAt(contract.address, 0) returns 0x000000000000000000000001da5b3fb76c78b6edee6be8f11a1c31ecfb02b272. Remember that smaller than 32-bytes variables are bundled together if they are conseuctive, so this is actually owner and contact variable side by side! The 01 at the end of leftmost 0x00..01 stands for the boolean value which is set to true now since we've already made contact. 
+So our first step here is to make contact and set the contact to true, and also the problem is hinting us to somehow use the codex array to change the owner of the contract. The tool in doing so probably has something to do with the length of array. In fact, the retract is suspiciously dangerous, and actually might underflow the array length! Since we are not following the advised Check-Effect-Interact pattern. The array length is an uint256, and once it is underflowed you basically "have" the entire contract storage (all 2 ^ 256 - 1 slots) as a part of your array and in the future we can manipulate all as we see deem fit. Consequently, you can index everything in the memory with that array!
+-After make_contact, we see that await web3.eth.getStorageAt(contract.address, 0) returns 0x000000000000000000000001da5b3fb76c78b6edee6be8f11a1c31ecfb02b272. Remember that smaller than 32-bytes variables are bundled together if they are consecutive, so this is actually owner and contact variable side by side! The 01 at the end of leftmost 0x00..01 stands for the boolean value which is set to true now since we've already made contact. 
 -The next slot, await web3.eth.getStorageAt(contract.address, 1) is the length of codex array. If we record something we will see that it gets incremented. W
 So then i was interested on how does indexing work and how can we index the owner slot now that our array covers the entire storage? If we look at the docs of highest version 0.5.0 as that is what the puzzle uses: https://docs.soliditylang.org/en/v0.5.17/miscellaneous.html#mappings-and-dynamic-arrays.
 
@@ -801,11 +799,11 @@ Now first we have to retract until the array length underflows, and then we just
 ```
 p = web3.utils.keccak256(web3.eth.abi.encodeParameters(["uint256"], [1]))
 ```
-So now we convert the hashed balue to Bigint so we are able to subtract back to the slot 0 of the codex
+So now we convert the hashed value to Bigint so we are able to subtract back to the slot 0 of the codex
 ```
 i = BigInt(2 ** 256) - BigInt(p)
 ```
-We can now pad our address with zeroes so as to meet the expected 32 byte lenght, here we exploit the flaw in the ABI specs. SInce doesn't validate that the lenght of the array atches the length of the payload
+We can now pad our address with zeroes so as to meet the expected 32 byte length, here we exploit the flaw in the ABI specs. Since it doesn't validate that the length of the array matches the length of the payload
 ```
 content = `0x` + `0`.repeat(24) + player.slice(2)
 ```
@@ -814,12 +812,12 @@ Then we call the revise function as follows:
 
 await contract.revise(i, content), {from:player, gas:900000})
 ```
-ANd that's everything we can then check the owner once again and it's now us
+And that's everything we can then check the owner once again and it's now us
 
 MAIN TAKEAWAY FROM CHALLENGE:
 
 From this we should know that modifying a dynamic array length without checking for under/overflow is very dangerous as it can expand the array's bounds to the entire storage area of 2256 - 1. This can possibly enable modifying the whole contract storage.
-And thankfully since v 0.6.0 we can't set the array lenght property in solidity.
+And thankfully since v 0.6.0 we can't set the array length property in solidity.
 
 
 
@@ -827,7 +825,7 @@ And thankfully since v 0.6.0 we can't set the array lenght property in solidity.
 This level is very similar to the levels Force and King. The problem with the Denial contract is the fact that instead of transferring using `.send()` or `.transfer`() which has a limit of 2300 gas and he exploit has to do with call function: partner.call{value:amountToSend}(""), by using`.call()` if no limit on the gas is specified, it will send all gas along with it.  `assert(false)`  used to do the trick in the old versions, this is because convenience functions assert and require can be used to check for conditions and throw an exception if the condition is not met.
 assert(false) compiles to 0xfe, which is an invalid opcode, using up all remaining gas, and reverting all changes.
 Whereas require(false) compiles to 0xfd which is the REVERT opcode, meaning it will refund the remaining gas. The opcode can also return a value (useful for debugging).
-But this no longer works due to a [breaking change](https://blog.soliditylang.org/2020/12/16/solidity-v0.8.0-release-announcement/) in solidity v0.8.0 so we need another way to expend all available gas. The simplest way to do this is to run a fallback function in an infinite loop, and then we set the partner address to our jsut deployed contract address
+But this no longer works due to a [breaking change](https://blog.soliditylang.org/2020/12/16/solidity-v0.8.0-release-announcement/) in solidity v0.8.0 so we need another way to expend all available gas. The simplest way to do this is to run a fallback function in an infinite loop, and then we set the partner address to our just deployed contract address
 ```
 pragma solidity ^0.8.0;
 
@@ -842,7 +840,7 @@ await contract.setWithdrawPartner("<address of our deployed DenialAttack contrac
 We then set the withdrawal partner as this contract address, and we are done.
 
 ## 21. Shop
-Here we have a level that looks like the Elevator level where we return different value everytime we call the function. Since `isSold` is updated first before the price is set, we are able to take advantage of this and return different values for `_buyer.price()` based on what the value of `shop.isSold()` returns. We might have to manually increase the gas limit on metamask. This is a common issue because metamask cannot estimate the gas cost when you using `.call`.
+Here we have a level that looks like the Elevator level where we return different value every time we call the function. Since `isSold` is updated first before the price is set, we are able to take advantage of this and return different values for `_buyer.price()` based on what the value of `shop.isSold()` returns. We might have to manually increase the gas limit on metamask. This is a common issue because metamask cannot estimate the gas cost when you using `.call`.
 From this level's contract we can see that `buy()` is calling `price()` twice:
 
 - Firstly, in the if condition, the price returned must be 100 or higher to pass.
@@ -910,7 +908,7 @@ contract MalToken is ERC20 {
 }
 
 ```
-Then we exchange MLT for token1 and token2 while draining DexTwo, to do this we send 100 MLT tokens to DexTwo using MLT transfer, so now price ratio in DexTwo btw MLT, token1 and token2 is 1:1:1, and awe aslo need to allow DexTwo to transact 300, where we have 100 for t1 and 200 for t32, so we just approve on our MLT token that our instant address uses 200 tokens, using the approve method and passing the instance address and 200 as parametres
+Then we exchange MLT for token1 and token2 while draining DexTwo, to do this we send 100 MLT tokens to DexTwo using MLT transfer, so now price ratio in DexTwo btw MLT, token1 and token2 is 1:1:1, and awe also need to allow DexTwo to transact 300, where we have 100 for t1 and 200 for t32, so we just approve on our MLT token that our instant address uses 200 tokens, using the approve method and passing the instance address and 200 as parameters
 The reason why this is possible is because the swap doesn't require that the from / to has to be token1 and token2 so you can use a 3rd token and drain each side sequentially.
 
 ```
@@ -1054,8 +1052,8 @@ await web3.eth.sendTransaction({
 
 ## 25. Motorbike
 
-Using proxies is a pretty common pattern in recent times, but this can lead to very disasterous consequences if one does not understand how to safely engage them. This level is an example of what happened witht the parity wallet.
-Here we want to destroy the Motorbike but within the motorbike contract, there isn't any `selfdestruct` calls. So innstead of attacking the Motorbike contract, we can instead attack the engine contract!
+Using proxies is a pretty common pattern in recent times, but this can lead to very disastrous consequences if one does not understand how to safely engage them. This level is an example of what happened with the parity wallet.
+Here we want to destroy the Motorbike but within the motorbike contract, there isn't any `selfdestruct` calls. So instead of attacking the Motorbike contract, we can instead attack the engine contract!
 Motorbike relies on the engine contract for its logic so if we can destroy the engine contract, the Motorbike is automatically rendered useless.
 
 We interact directly with the engine contract and gain ownership of it. Once we make ourself the upgrader, we can easily upgrade the engine logic to a malicious contract and call `selfdestruct`.
@@ -1132,7 +1130,7 @@ if (address(delegate) == address(0)) {
 }
 ```
 
-This means that it actually calls `delegateTransfer()` method of some `DelegateERC20` contract. But here this `DelegateERC20` is the implementation of the underlying (`DET`) token itself! And `delegateTransfer()` simply takes the given parameters and tranfer the tokens according to them. 
+This means that it actually calls `delegateTransfer()` method of some `DelegateERC20` contract. But here this `DelegateERC20` is the implementation of the underlying (`DET`) token itself! And `delegateTransfer()` simply takes the given parameters and transfer the tokens according to them. 
 The only limitation `delegateTransfer()` puts is that `msg.sender` must be the LegacyToken (`delegatedFrom` address) contract.
 
 This just means that we can indirectly sweep the underlying tokens through `transfer()` of `LegacyToken` contract. We just have to call `sweepToken` with address of `LegacyToken` contract. Which would consequently cause the  `LegacyContract` to call the `DoubleEntryPoint`'s (DET token) `delegateTransfer()` method. 
@@ -1220,8 +1218,7 @@ await web3.eth.sendTransaction({from: player, to: forta, data: setBotSig })
 ...
 
 And that is it for all the levels!
-The challenges were incredible and fun, i definitely was challenged, but it was worth it all in the end with the amount of new information I've learnt and can share.
-_If you learned something new/ awesome? Consider starring the 😄
+The challenges were incredible and fun, I definitely was challenged, but it was worth it all in the end with the amount of new information I've learnt and can share.
 
-_and following me on twitter [here](https://twitter.com/bauchibred)_ 🙏
+_If you learned something new/ awesome? Consider starring the repo and following me on twitter [here](https://twitter.com/bauchibred)_ 🙏
 
