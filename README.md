@@ -105,7 +105,7 @@ contract TelephoneHack {
 
 MAIN LESSON FROM CHALLENGE:
 We should never use tx.origin for authorization in the functions of our contracts.
-For more info on why not to use tx.origin for authorization check this https://hackernoon.com/hacking-solidity-contracts-using-txorigin-for-authorization-are-vulnerable-to-phishing
+For more info on why not to use tx.origin for authorization check [this](https://hackernoon.com/hacking-solidity-contracts-using-txorigin-for-authorization-are-vulnerable-to-phishing) 🙏
 
 
 ## 5. Token
@@ -143,8 +143,7 @@ contract.sendTransaction({data: pwnFuncSignature})
 
 MAIN LESSON FROM CHALLENGE:
 When we use delegatecall, we're reusing another contract's code but also giving it access to our contract's state variables. Because delegates have complete access to the contract's state, use with extreme caution because delegatecall is risky and has been used as an attack vector before.
-Check below for a two series of the dangers with using delegatecall when the storage are not layered out correctly as in the original contract(link is to the part 2)
-https://www.youtube.com/watch?v=oinniLm5gAM&ab_channel=SmartContractProgrammer
+Check below for a two series of the dangers with using delegatecall when the storage are not layered out correctly as in the original contract [link is to the part 2](https://www.youtube.com/watch?v=oinniLm5gAM&ab_channel=SmartContractProgrammer)
 
 ## 7. Force
 
@@ -173,8 +172,7 @@ contract ForceAttack {
 MAIN TAKEAWAY FROM CHALLENGE:
 
 If a Smart Contract is not programmed to receive Ether, there's still a way we can force money into it. We write a separate contract that self destructs by calling the global selfdestruct() function which takes an address as a parameter. And right before our contract self destructs, it sends the specified address all of its remaining balance!
-Also to read more about how forcefully sending ether to contract can cause damages, check out the explanation on EtherGame from the below repo
-https://github.com/ethereumbook/ethereumbook/blob/develop/09smart-contracts-security.asciidoc#unexpected-ether
+Also to read more about how forcefully sending ether to contract can cause damages, check out the explanation on EtherGame from the this [repo](https://github.com/ethereumbook/ethereumbook/blob/develop/09smart-contracts-security.asciidoc#unexpected-ether)
 
 ## 8. Vault
 
@@ -222,7 +220,7 @@ contract KingAttack {
 
 This is the same exploit that led to the [DAO hack](https://www.coindesk.com/learn/2016/06/25/understanding-the-dao-attack/). Which caused the Ethereum blockchain to fork into the official Ethereum blockchain and Ethereum Classic.
 
-There is a very important pattern called Checks - Effects - Interactions in Solidity, this is one of the multiple ways to secure a smart contract from a re-entrant attack, other ways include using a [mutex lock]((https://medium.com/coinmonks/protect-your-solidity-smart-contracts-from-reentrancy-attacks-9972c3af7c21)
+There is a very important pattern called Checks - Effects - Interactions in Solidity, this is one of the multiple ways to secure a smart contract from a re-entrant attack, other ways include using a [mutex lock](https://medium.com/coinmonks/protect-your-solidity-smart-contracts-from-reentrancy-attacks-9972c3af7c21)
 Using the C-E-I, we basically check if we can do something, such as checking balance, we then apply the effects of doing it on our contract, such as updating balance then we do the actual interactions on-chain with other, such as transferring money.
 In this case where we have the withdrawal function with the interaction coming before the effect. This means that when we receive money from within the withdraw, things are briefly in our control until the program goes back to the withdraw function to do the effect. While we have control we can keep on calling withdraw in a loop until everything is drained and there is nothing left.
 
@@ -504,7 +502,7 @@ modifier gateTwo() {
 The extcodesize basically returns the size of the code in the given address, which is caller for this case. Contracts have code, and user accounts do not. So some developers might want only EOAs to interact with their contracts and have this as a requirement, but from this challenge we can already see that `extcodesize` being equal to zero does not necessarily mean that the caller is an EOA.
 Here is the trick of this gate: extcodesize returns 0 if it is being called in the constructor!  
 In short, we have to execute our attack from within the constructor, cause when we first deploy a contract, the extcodesize of that address is 0 until the constructor is completed!
-Check this stack convo for more understanding on extcodesize "https://ethereum.stackexchange.com/questions/15641/how-does-a-contract-find-out-if-another-address-is-a-contract/15642#15642"
+Check this [stack convo](https://ethereum.stackexchange.com/questions/15641/how-does-a-contract-find-out-if-another-address-is-a-contract/15642#15642) for more understanding on extcodesize 
 
 3. `gateThree` is very easy to solve if you know the XOR rule of `if A ^ B = C then A ^ C = B`.
    This is an XOR operation (often denoted with ⊕), and there is really only one parameter we can control here: the gate key. XOR has the property that if the same value XORs itself they cancel out; also, XOR is commutative so a ⊕ b = b ⊕ a. Starting with a ⊕ b = c, XOR both sides with a we get a ⊕ a ⊕ b = c ⊕ a, and the left side cancels out to give b = c ⊕ a.
@@ -572,8 +570,7 @@ await contract.transferFrom(player, [another wallet], value);
 
 ```
 
-On a side note, the commands used in the terminal for this level  are known as Immediately Invoked Function Expressions (IIFE), pretty interesting and would advise to check up on 
-https://www.geeksforgeeks.org/immediately-invoked-function-expressions-iife-in-javascript/
+On a side note, the commands used in the terminal for this level  are known as Immediately Invoked Function Expressions (IIFE), pretty interesting and would advise to check up on [this](https://www.geeksforgeeks.org/immediately-invoked-function-expressions-iife-in-javascript/)
 
 MAIN TAKEAWAY FROM CHALLENGE:
 
@@ -618,7 +615,7 @@ MAIN TAKEAWAY FROM CHALLENGE:
 Do not forget that ideally, libraries should not store state and quoting the author's message: "This example demonstrates why the library keyword should be used for building libraries, as it prevents the libraries from storing and accessing state variables."
 
 The order in which we list state variables in a contract correspond to slots in storage, and require particular attention when using delegatecall.
-A great explanation on topics related to how this level is solved can be found on here https://medium.com/coinmonks/ethernaut-lvl-16-preservation-walkthrough-how-to-inject-malicious-contracts-with-delegatecall-81e071f98a12
+A great explanation on topics related to how this level is solved can be found on [here](https://medium.com/coinmonks/ethernaut-lvl-16-preservation-walkthrough-how-to-inject-malicious-contracts-with-delegatecall-81e071f98a12)
 
 
 ## 17. Recovery
@@ -651,7 +648,7 @@ contract Attack {
 }
 ```
 
-Easy way explained above already that's by using etherscan to look for the new generated address, so another way to get the new generated contract address as explained in this link https://ethereum.stackexchange.com/questions/98700/find-address-of-a-contract-before-deployment-in-hardhat-and-ethers-js
+Easy way explained above already that's by using etherscan to look for the new generated address, so another way to get the new generated contract address as explained in this [link](https://ethereum.stackexchange.com/questions/98700/find-address-of-a-contract-before-deployment-in-hardhat-and-ethers-js)
 That's by running this script on node we pre-calculate the address of the token contract, where we pass the level's instance address to `from`
 ```
 const { getContractAddress } = require("@ethersproject/address");
@@ -750,11 +747,11 @@ await contract.setSolver("contract address");
 ```
 
 Resources to try to check on:
-Opcodes and bytecodes in solidity https://medium.com/@blockchain101/solidity-bytecode-and-opcode-basics-672e9b1a88c2
+[Opcodes and bytecodes in solidity](https://medium.com/@blockchain101/solidity-bytecode-and-opcode-basics-672e9b1a88c2)
 
-6 parts to destructuring a solidity contract https://blog.openzeppelin.com/deconstructing-a-solidity-contract-part-i-introduction-832efd2d7737/
+[6 parts to destructuring a solidity contract](https://blog.openzeppelin.com/deconstructing-a-solidity-contract-part-i-introduction-832efd2d7737/)
 
-S/O https://medium.com/coinmonks/ethernaut-lvl-19-magicnumber-walkthrough-how-to-deploy-contracts-using-raw-assembly-opcodes-c50edb0f71a2 and https://listed.to/@r1oga/13786/ethernaut-levels-16-to-18 for the detailed explanatikon on how to solve this level.
+S/O [this](https://medium.com/coinmonks/ethernaut-lvl-19-magicnumber-walkthrough-how-to-deploy-contracts-using-raw-assembly-opcodes-c50edb0f71a2) and [this](https://listed.to/@r1oga/13786/ethernaut-levels-16-to-18) for the detailed explanatikon on how to solve this level.
 
 
 
@@ -784,7 +781,7 @@ The entire solution can be split into two parts. First, we have to somehow set c
 So our first step here is to make contact and set the contact to true, and also the problem is hinting us to somehow use the codex array to change the owner of the contract. The tool in doing so probably has something to do with the length of array. In fact, the retract is suspiciously dangerous, and actually might underflow the array length! Since we are not following the advised Check-Effect-Interact pattern. The array length is an uint256, and once it is underflowed you basically "have" the entire contract storage (all 2 ^ 256 - 1 slots) as a part of your array and in the future we can manipulate all as we see deem fit. Consequently, you can index everything in the memory with that array!
 -After make_contact, we see that await web3.eth.getStorageAt(contract.address, 0) returns 0x000000000000000000000001da5b3fb76c78b6edee6be8f11a1c31ecfb02b272. Remember that smaller than 32-bytes variables are bundled together if they are consecutive, so this is actually owner and contact variable side by side! The 01 at the end of leftmost 0x00..01 stands for the boolean value which is set to true now since we've already made contact. 
 -The next slot, await web3.eth.getStorageAt(contract.address, 1) is the length of codex array. If we record something we will see that it gets incremented. W
-So then i was interested on how does indexing work and how can we index the owner slot now that our array covers the entire storage? If we look at the docs of highest version 0.5.0 as that is what the puzzle uses: https://docs.soliditylang.org/en/v0.5.17/miscellaneous.html#mappings-and-dynamic-arrays.
+So then i was interested on how does indexing work and how can we index the owner slot now that our array covers the entire storage? If we look at the docs of highest version 0.5.0 as that is what the [puzzle uses](https://docs.soliditylang.org/en/v0.5.17/miscellaneous.html#mappings-and-dynamic-arrays)
 
 The mapping or the dynamic array itself occupies a slot in storage at some position `p` according to the above rule (or by recursively applying this rule for mappings of mappings or arrays of arrays). For dynamic arrays, this slot stores the number of elements in the array. Array data is located at `keccak256(p)`.
 
